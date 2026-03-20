@@ -1,6 +1,6 @@
-# 🌤 Weather Trading Bot — Polymarket
+# 🌤 WeatherBet — Polymarket Weather Trading Bot
 
-Automated weather market trading bot for Polymarket. Finds mispriced temperature outcomes using real station data from NWS.
+Automated weather market trading bot for Polymarket. Finds mispriced temperature outcomes using real forecast data from multiple sources across 20 cities worldwide.
 
 No SDK. No black box. Pure Python.
 
@@ -8,20 +8,21 @@ No SDK. No black box. Pure Python.
 
 ## Versions
 
-### `bot_v1.py` — Base Bot (current)
-
+### `bot_v1.py` — Base Bot
 The foundation. Scans 6 US cities, fetches forecasts from NWS using airport station coordinates, finds matching temperature buckets on Polymarket, and enters trades when the market price is below the entry threshold.
 
 No math, no complexity. Just the core logic — good for understanding how the system works.
 
-### `bot_v2.py` — Kelly + EV Edition (coming soon)
-
+### `weatherbet.py` — Full Bot (current)
 Everything in v1, plus:
-
+- **20 cities** across 4 continents (US, Europe, Asia, South America, Oceania)
+- **3 forecast sources** — ECMWF (global), HRRR/GFS (US, hourly), METAR (real-time observations)
 - **Expected Value** — skips trades where the math doesn't work
-- **Kelly Criterion** — sizes positions based on edge strength, not a flat %
-- **Auto-exit** — closes positions when price hits the exit threshold
-- **Live dashboard** — updates `simulation.json` so the dashboard stays current
+- **Kelly Criterion** — sizes positions based on edge strength
+- **Stop-loss + trailing stop** — 20% stop, moves to breakeven at +20%
+- **Slippage filter** — skips markets with spread > $0.03
+- **Self-calibration** — learns forecast accuracy per city over time
+- **Full data storage** — every forecast snapshot, trade, and resolution saved to JSON
 
 ---
 
@@ -30,12 +31,13 @@ Everything in v1, plus:
 Polymarket runs markets like "Will the highest temperature in Chicago be between 46–47°F on March 7?" These markets are often mispriced — the forecast says 78% likely but the market is trading at 8 cents.
 
 The bot:
-
-1. Fetches forecasts from NWS using airport coordinates
-2. Combines real station observations with hourly forecast to get the true daily maximum
+1. Fetches forecasts from ECMWF and HRRR via Open-Meteo (free, no key required)
+2. Gets real-time observations from METAR airport stations
 3. Finds the matching temperature bucket on Polymarket
-4. Enters the trade if market price is below the entry threshold
-5. Runs a full $1,000 simulation against real market prices before you risk anything
+4. Calculates Expected Value — only enters if the math is positive
+5. Sizes the position using fractional Kelly Criterion
+6. Monitors stops every 10 minutes, full scan every hour
+7. Auto-resolves markets by querying Polymarket API directly
 
 ---
 
@@ -53,11 +55,13 @@ Every Polymarket weather market resolves on a specific airport station. NYC reso
 | Dallas | KDAL | Love Field |
 | Seattle | KSEA | Sea-Tac |
 | Atlanta | KATL | Hartsfield |
+| London | EGLC | London City |
+| Tokyo | RJTT | Haneda |
+| ... | ... | ... |
 
 ---
 
 ## Installation
-
 ```bash
 git clone https://github.com/alteregoeth-ai/weatherbot
 cd weatherbot
@@ -65,39 +69,45 @@ pip install requests
 ```
 
 Create `config.json` in the project folder:
-
 ```json
 {
-  "entry_threshold": 0.15,
-  "exit_threshold": 0.45,
-  "max_trades_per_run": 5,
-  "min_hours_to_resolution": 2,
-  "locations": "nyc,chicago,miami,dallas,seattle,atlanta"
+  "balance": 10000.0,
+  "max_bet": 20.0,
+  "min_ev": 0.05,
+  "max_price": 0.45,
+  "min_volume": 2000,
+  "min_hours": 2.0,
+  "max_hours": 72.0,
+  "kelly_fraction": 0.25,
+  "max_slippage": 0.03,
+  "scan_interval": 3600,
+  "calibration_min": 30,
+  "vc_key": "YOUR_VISUAL_CROSSING_KEY"
 }
 ```
+
+Get a free Visual Crossing API key at visualcrossing.com — used to fetch actual temperatures after market resolution.
 
 ---
 
 ## Usage
-
 ```bash
-python bot_v1.py          # paper mode — shows signals, no trades
-python bot_v1.py --live   # simulates trades with $1,000 balance
-python bot_v1.py --reset  # reset balance back to $1,000
-python bot_v1.py --positions  # show open positions and PnL
+python weatherbet.py           # start the bot — scans every hour
+python weatherbet.py status    # balance and open positions
+python weatherbet.py report    # full breakdown of all resolved markets
 ```
 
 ---
 
-## Configuration
+## Data Storage
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `entry_threshold` | `0.15` | Buy below this price |
-| `exit_threshold` | `0.45` | Sell above this price |
-| `max_trades_per_run` | `5` | Max new trades per scan |
-| `min_hours_to_resolution` | `2` | Skip if resolves too soon |
-| `locations` | `nyc,...` | Cities to scan (comma separated) |
+All data is saved to `data/markets/` — one JSON file per market. Each file contains:
+- Hourly forecast snapshots (ECMWF, HRRR, METAR)
+- Market price history
+- Position details (entry, stop, PnL)
+- Final resolution outcome
+
+This data is used for self-calibration — the bot learns forecast accuracy per city over time and adjusts position sizing accordingly.
 
 ---
 
@@ -105,21 +115,10 @@ python bot_v1.py --positions  # show open positions and PnL
 
 | API | Auth | Purpose |
 |-----|------|---------|
-| NWS (api.weather.gov) | None | US city forecasts + station observations |
+| Open-Meteo | None | ECMWF + HRRR forecasts |
+| Aviation Weather (METAR) | None | Real-time station observations |
 | Polymarket Gamma | None | Market data |
-| Polymarket CLOB | Wallet key | Live trading (optional) |
-
----
-
-## Live Trading
-
-The bot runs in simulation mode by default. To execute real trades, add Polymarket CLOB integration:
-
-```bash
-pip install py-clob-client
-```
-
-Then replace the paper mode block in `bot_v1.py` with your CLOB buy function. Full guide in the article linked below.
+| Visual Crossing | Free key | Historical temps for resolution |
 
 ---
 
