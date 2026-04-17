@@ -209,3 +209,75 @@ def test_sort_leg_candidates_orders_by_edge_then_liquidity():
 
     assert [item["edge"] for item in ordered] == [0.08, 0.08, 0.05]
     assert ordered[0]["quote_context"]["bid_size"] == 50.0
+
+
+def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.70,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    yes_assessment = make_assessment(
+        strategy_leg="YES_SNIPER",
+        token_side="yes",
+        size_multiplier=1.0,
+        ask=0.02,
+    )
+    no_assessment = make_assessment(
+        strategy_leg="NO_CARRY",
+        token_side="no",
+        size_multiplier=0.5,
+        bid=0.95,
+    )
+
+    assert bot_v2.candidate_worst_loss(yes_assessment, 10000.0) == 20.0
+    assert bot_v2.candidate_worst_loss(no_assessment, 10000.0) == 10.0
+
+
+def test_route_candidate_assessment_normalizes_allowed_candidate_statuses():
+    market = make_market()
+    risk_state = make_risk_state()
+    router_cfg = load_router_cfg()
+
+    accepted = bot_v2.route_candidate_assessment(
+        make_assessment(status="accepted"), market, risk_state, router_cfg
+    )
+    size_down = bot_v2.route_candidate_assessment(
+        make_assessment(status="size_down", size_multiplier=0.5),
+        market,
+        risk_state,
+        router_cfg,
+    )
+    reprice = bot_v2.route_candidate_assessment(
+        make_assessment(status="reprice"), market, risk_state, router_cfg
+    )
+    rejected = bot_v2.route_candidate_assessment(
+        make_assessment(status="rejected", edge=None), market, risk_state, router_cfg
+    )
+
+    assert accepted["status"] == "accepted"
+    assert size_down["status"] == "accepted"
+    assert reprice["status"] == "rejected"
+    assert rejected["status"] == "rejected"
