@@ -1711,10 +1711,80 @@ def is_order_terminal(order):
     return (order or {}).get("status") in {"filled", "canceled", "expired"}
 
 
+def is_order_unfinished(order):
+    return (order or {}).get("status") in {"planned", "working", "partial"}
+
+
 def ensure_market_order_defaults(market):
     market.setdefault("active_order", None)
     market.setdefault("order_history", [])
     return market
+
+
+def build_order_restore_entry(market, order):
+    reservation = market.get("reserved_exposure") or {}
+    position = market.get("position") or {}
+    return {
+        "market_key": f"{market.get('city')}:{market.get('date')}",
+        "city": market.get("city"),
+        "date": market.get("date"),
+        "city_name": market.get("city_name"),
+        "status": order.get("status"),
+        "order_id": order.get("order_id"),
+        "strategy_leg": order.get("strategy_leg"),
+        "token_side": order.get("token_side"),
+        "market_id": order.get("market_id"),
+        "range": list(order.get("range") or []),
+        "filled_shares": round(float(order.get("filled_shares", 0.0) or 0.0), 4),
+        "remaining_shares": round(float(order.get("remaining_shares", 0.0) or 0.0), 4),
+        "reserved_worst_loss": round(
+            float(reservation.get("reserved_worst_loss", 0.0) or 0.0), 2
+        ),
+        "position_status": position.get("status"),
+        "position_shares": round(float(position.get("shares", 0.0) or 0.0), 4),
+        "updated_at": order.get("updated_at"),
+    }
+
+
+def restore_order_state_from_markets(markets):
+    status_counts = {
+        "planned": 0,
+        "working": 0,
+        "partial": 0,
+        "filled": 0,
+        "canceled": 0,
+        "expired": 0,
+    }
+    active_orders = []
+
+    for market in markets or []:
+        ensure_market_order_defaults(market)
+        active_order = market.get("active_order")
+        if active_order:
+            status = active_order.get("status")
+            if status in status_counts:
+                status_counts[status] += 1
+            if is_order_unfinished(active_order):
+                active_orders.append(build_order_restore_entry(market, active_order))
+
+        for order in market.get("order_history", []) or []:
+            status = (order or {}).get("status")
+            if status in status_counts:
+                status_counts[status] += 1
+
+    active_orders.sort(
+        key=lambda item: (
+            item.get("date") or "",
+            item.get("city") or "",
+            item.get("order_id") or "",
+        )
+    )
+
+    return {
+        "active_orders": active_orders,
+        "status_counts": status_counts,
+        "last_restored_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def find_route_for_reservation(market):
@@ -1901,16 +1971,17 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     if not reservation or not assessment:
         return {"filled_cost": 0.0, "opened_position": False}
 
-    built = build_passive_order_intent(
-        market,
-        reservation,
-        assessment,
-        market.get("quote_snapshot", []),
-        ts,
-    )
-
     active_order = market.get("active_order")
     if active_order:
+        if active_order.get("status") == "planned":
+            active_order = apply_order_transition(
+                active_order,
+                "working",
+                "order_resumed",
+                ts,
+            )
+            market["active_order"] = active_order
+
         if active_order.get("expires_at"):
             try:
                 if datetime.fromisoformat(
@@ -1940,14 +2011,78 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
             except Exception:
                 pass
 
+    active_order = market.get("active_order")
+    quote = find_quote_for_market(
+        market.get("quote_snapshot", []),
+        (active_order or {}).get("market_id"),
+    )
+    side_quote = (
+        quote.get((active_order or {}).get("token_side"))
+        if quote and (active_order or {}).get("token_side") in {"yes", "no"}
+        else None
+    ) or {}
+
+    if active_order:
+        ask = safe_float(side_quote.get("ask"))
+        ask_size = safe_float(side_quote.get("ask_size"))
+        if ask is not None and ask_size is not None:
+            if ask <= float(active_order.get("limit_price", 0.0) or 0.0):
+                fill_shares = round(
+                    min(
+                        ask_size,
+                        float(active_order.get("remaining_shares", 0.0) or 0.0),
+                    ),
+                    4,
+                )
+                if fill_shares > 0:
+                    next_status = (
+                        "filled"
+                        if fill_shares
+                        >= float(active_order.get("remaining_shares", 0.0) or 0.0)
+                        else "partial"
+                    )
+                    transitioned = apply_order_transition(
+                        active_order,
+                        next_status,
+                        "quote_touched_limit",
+                        ts,
+                        fill_shares=fill_shares,
+                        fill_price=ask,
+                    )
+                    if next_status == "partial":
+                        market["active_order"] = transitioned
+                        return {"filled_cost": 0.0, "opened_position": False}
+
+                    archive_order(market, transitioned)
+                    market["position"] = build_position_from_order(
+                        market, transitioned, assessment, forecast_snap
+                    )
+                    return {
+                        "filled_cost": round(
+                            float(
+                                (market.get("position") or {}).get("cost", 0.0) or 0.0
+                            ),
+                            2,
+                        ),
+                        "opened_position": market.get("position") is not None,
+                    }
+
+    built = build_passive_order_intent(
+        market,
+        reservation,
+        assessment,
+        market.get("quote_snapshot", []),
+        ts,
+    )
+
     replacement_order = None
     active_order = market.get("active_order")
     if active_order and built.get("order"):
         new_limit = float(built["order"].get("limit_price", 0.0) or 0.0)
         old_limit = float(active_order.get("limit_price", 0.0) or 0.0)
-        if abs(new_limit - old_limit) > float(
-            ORDER_POLICY.get("replace_edge_buffer", 0.02) or 0.02
-        ):
+        if active_order.get("status") == "working" and abs(
+            new_limit - old_limit
+        ) > float(ORDER_POLICY.get("replace_edge_buffer", 0.02) or 0.02):
             transition_order_terminal(
                 market, risk_state, active_order, "canceled", "quote_repriced", ts
             )
@@ -2225,9 +2360,9 @@ def load_state():
     state.setdefault("wins", 0)
     state.setdefault("losses", 0)
     state.setdefault("peak_balance", BALANCE)
-    state["risk_state"] = restore_risk_state_from_markets(
-        state, load_all_markets(), RISK_ROUTER
-    )
+    markets = load_all_markets()
+    state["risk_state"] = restore_risk_state_from_markets(state, markets, RISK_ROUTER)
+    state["order_state"] = restore_order_state_from_markets(markets)
     return state
 
 
@@ -3060,6 +3195,55 @@ def monitor_positions():
     return closed
 
 
+def refresh_active_order_quotes(market):
+    contracts = market.get("market_contracts", []) or []
+    if not contracts:
+        return market.get("quote_snapshot", []) or []
+    market["quote_snapshot"] = build_quote_snapshot(contracts)
+    return market["quote_snapshot"]
+
+
+def monitor_active_orders():
+    markets = load_all_markets()
+    active_markets = [m for m in markets if is_order_unfinished(m.get("active_order"))]
+    if not active_markets:
+        return 0
+
+    state = load_state()
+    balance = state["balance"]
+    resumed = 0
+
+    for mkt in active_markets:
+        refresh_active_order_quotes(mkt)
+        forecast_snap = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "best": (mkt.get("forecast_snapshots") or [{}])[-1].get("best")
+            if mkt.get("forecast_snapshots")
+            else None,
+            "best_source": (mkt.get("forecast_snapshots") or [{}])[-1].get(
+                "best_source"
+            )
+            if mkt.get("forecast_snapshots")
+            else None,
+        }
+        update = sync_market_order(
+            mkt, state["risk_state"], forecast_snap, market_ready=True
+        )
+        if update.get("opened_position"):
+            balance -= update.get("filled_cost", 0.0)
+            state["total_trades"] += 1
+            resumed += 1
+        save_market(mkt)
+
+    state["balance"] = round(balance, 2)
+    state["risk_state"] = state.get("risk_state") or build_empty_risk_state(
+        state.get("starting_balance", BALANCE), RISK_ROUTER
+    )
+    state["order_state"] = restore_order_state_from_markets(load_all_markets())
+    save_state(state)
+    return resumed
+
+
 def run_loop():
     global _cal
     _cal = load_cal()
@@ -3111,7 +3295,8 @@ def run_loop():
             print(f"[{now_str}] monitoring positions...")
             try:
                 stopped = monitor_positions()
-                if stopped:
+                resumed = monitor_active_orders()
+                if stopped or resumed:
                     state = load_state()
                     print(f"  balance: ${state['balance']:,.2f}")
             except Exception as e:
