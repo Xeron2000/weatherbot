@@ -29,12 +29,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. 操作者可以让机器人持续扫描配置好的城市与日期范围，并稳定产出候选市场快照。
   2. 每个被纳入扫描结果的市场都能显示正确的机场站点、温区、结算规则和 condition/token 标识。
   3. 当规则映射缺失、单位不一致或天气数据过期时，机器人会明确跳过该市场而不是继续交易。
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 01-01-PLAN.md — 建立 Phase 1 测试底座与市场语义 helper 合同
 - [x] 01-02-PLAN.md — 将语义 schema 和 guardrail 接入扫描主循环与 market JSON
 - [x] 01-03-PLAN.md — 在状态/报告中展示 accepted/skipped market 语义并补文档
+- [x] 01-04-PLAN.md — 补齐 accepted summary 的结算规则与 contract identifiers 可见性
 
 ### Phase 2: 候选定价与双策略筛选
 **Goal**: 操作者可以基于 band probability 和当前可执行盘口，为低价 YES 与高价 NO 两条策略腿分别筛出值得挂单的机会。
@@ -96,7 +97,7 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 2.1 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 市场语义与扫描基线 | 3/3 | Complete | 2026-04-17 |
+| 1. 市场语义与扫描基线 | 4/4 | Complete | 2026-04-17 |
 | 2. 候选定价与双策略筛选 | 0/TBD | Not started | - |
 | 3. 资金路由与暴露控制 | 0/TBD | Not started | - |
 | 4. 被动挂单与订单恢复 | 0/TBD | Not started | - |

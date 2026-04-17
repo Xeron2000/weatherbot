@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-04-17T10:15:40.290Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-04-17T10:32:14.190Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 01 (市场语义与扫描基线) — EXECUTING
-Plan: 3 of 3
+Plan: 4 of 4
 Status: Phase complete — ready for verification
 Last activity: 2026-04-17
 
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 3 min
 - Total execution time: 0.2 hours
 
@@ -44,16 +44,17 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 01 | 3 | 9 min | 3 min |
+| Phase 01 | 4 | 11 min | 3 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 3
+- Last 5 plans: 4
 - Trend: Stable
 
 | Phase 01 P01 | 3 min | 2 tasks | 6 files |
 | Phase 01 P02 | 4 min | 2 tasks | 3 files |
 | Phase 01 P03 | 2 min | 2 tasks | 3 files |
+| Phase 01 P04 | 2 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01]: guardrail 失败时先写入 skipped 状态并保存，再 continue 到下一个 city/date，避免坏 market 污染候选 universe。
 - [Phase 01]: CLI status/report 直接读取 resolution_metadata、market_contracts、scan_guardrails，不重新推断语义。
 - [Phase 01]: accepted/skipped 扫描摘要与 open/resolved trade 统计分开展示，避免把 skipped market 误算成持仓或战绩。
+- [Phase 01]: accepted scan summary 继续直接读取 resolution_metadata 与 market_contracts，不重新推断规则或 identifiers。
+- [Phase 01]: 规则文本允许 deterministic 截断，但必须保留可识别结算语义的稳定片段。
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T10:15:40.288Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-04-17T10:32:14.188Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
