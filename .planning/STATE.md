@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-04-17T10:09:51.885Z"
+status: verifying
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-04-17T10:15:40.290Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -27,32 +27,33 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 Phase: 01 (市场语义与扫描基线) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-17
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0.0 hours
+- Total plans completed: 3
+- Average duration: 3 min
+- Total execution time: 0.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| Phase 01 | 3 | 9 min | 3 min |
 
 **Recent Trend:**
 
-- Last 5 plans: -
+- Last 5 plans: 3
 - Trend: Stable
 
 | Phase 01 P01 | 3 min | 2 tasks | 6 files |
 | Phase 01 P02 | 4 min | 2 tasks | 3 files |
+| Phase 01 P03 | 2 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 测试通过 fixture + 运行期断言暴露缺 helper 问题，避免 import/setup error 掩盖真实 RED 状态。
 - [Phase 01]: 将 event_slug/event_id、resolution_metadata、market_contracts、scan_guardrails 直接持久化到 market JSON，而不是额外拆存储层。
 - [Phase 01]: guardrail 失败时先写入 skipped 状态并保存，再 continue 到下一个 city/date，避免坏 market 污染候选 universe。
+- [Phase 01]: CLI status/report 直接读取 resolution_metadata、market_contracts、scan_guardrails，不重新推断语义。
+- [Phase 01]: accepted/skipped 扫描摘要与 open/resolved trade 统计分开展示，避免把 skipped market 误算成持仓或战绩。
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T10:09:51.884Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-04-17T10:15:40.288Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
