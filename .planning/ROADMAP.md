@@ -51,7 +51,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — 建立 band probability 真相源并把 bucket probability 表持久化到 market JSON
 - [x] 02-02-PLAN.md — 用 CLOB token-level quote snapshot 替换 Gamma 执行近似并补 execution stop reasons
-- [ ] 02-03-PLAN.md — 增加 YES/NO 分腿配置与 candidate_assessments 持久化
+- [x] 02-03-PLAN.md — 增加 YES/NO 分腿配置与 candidate_assessments 持久化
 - [ ] 02-04-PLAN.md — 在 status/report 中展示候选解释并补 README 验证说明
 
 ### Phase 3: 资金路由与暴露控制

@@ -15,8 +15,8 @@
 ### Probability & Strategy
 
 - [x] **STRAT-01**: 操作者可以让机器人根据多源天气预测为每个温区计算 band probability，而不是只看单点温度预测
-- [ ] **STRAT-02**: 操作者可以为低价 YES 策略配置独立的价格、概率、时间窗与仓位阈值
-- [ ] **STRAT-03**: 操作者可以为高价 NO 策略配置独立的价格、概率、时间窗与仓位阈值
+- [x] **STRAT-02**: 操作者可以为低价 YES 策略配置独立的价格、概率、时间窗与仓位阈值
+- [x] **STRAT-03**: 操作者可以为高价 NO 策略配置独立的价格、概率、时间窗与仓位阈值
 - [ ] **STRAT-04**: 操作者可以让机器人在低价 YES 和高价 NO 两个策略腿之间独立分配资金，并限制每条腿的最大风险暴露
 
 ### Order Lifecycle
@@ -82,8 +82,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MKT-03 | Phase 1 | Complete |
 | MKT-04 | Phase 2 | Complete |
 | STRAT-01 | Phase 2 | Complete |
-| STRAT-02 | Phase 2 | Pending |
-| STRAT-03 | Phase 2 | Pending |
+| STRAT-02 | Phase 2 | Complete |
+| STRAT-03 | Phase 2 | Complete |
 | STRAT-04 | Phase 3 | Pending |
 | ORDR-01 | Phase 4 | Pending |
 | ORDR-02 | Phase 4 | Pending |
