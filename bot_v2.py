@@ -562,9 +562,9 @@ WEATHER_FRESHNESS_HOURS = 6.0
 def parse_market_unit(text):
     if not text:
         return None
-    if re.search(r"°?F|fahrenheit", text, re.IGNORECASE):
+    if re.search(r"(?:°\s*F\b|\bF\b|fahrenheit)", text, re.IGNORECASE):
         return "F"
-    if re.search(r"°?C|celsius", text, re.IGNORECASE):
+    if re.search(r"(?:°\s*C\b|\bC\b|celsius)", text, re.IGNORECASE):
         return "C"
     return None
 
@@ -767,6 +767,8 @@ def new_market(city_slug, date_str, event, hours):
         "date": date_str,
         "unit": loc["unit"],
         "station": loc["station"],
+        "event_slug": event.get("slug", ""),
+        "event_id": event.get("id", ""),
         "event_end_date": event.get("endDate", ""),
         "hours_at_discovery": round(hours, 1),
         "status": "open",  # open | closed | resolved
@@ -774,6 +776,24 @@ def new_market(city_slug, date_str, event, hours):
         "actual_temp": None,  # filled after resolution
         "resolved_outcome": None,  # win / loss / no_position
         "pnl": None,
+        "resolution_metadata": {
+            "station": loc["station"],
+            "unit": loc["unit"],
+            "resolution_text": "",
+            "resolution_source": "",
+            "rounding_rule": "",
+        },
+        "market_contracts": [],
+        "scan_guardrails": {
+            "admissible": False,
+            "skip_reasons": [],
+            "weather_fresh": False,
+            "mapping_ok": False,
+            "unit_ok": False,
+        },
+        "last_scan_status": "pending",
+        "last_scan_at": None,
+        "last_scan_reason": None,
         "forecast_snapshots": [],  # list of forecast snapshots
         "market_snapshots": [],  # list of market price snapshots
         "all_outcomes": [],  # all market buckets
