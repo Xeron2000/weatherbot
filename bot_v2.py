@@ -904,19 +904,85 @@ def scan_and_update():
                 if hours < MIN_HOURS or hours > MAX_HOURS:
                     continue
                 mkt = new_market(city_slug, date, event, hours)
+            else:
+                mkt.setdefault("event_slug", event.get("slug", ""))
+                mkt.setdefault("event_id", event.get("id", ""))
+                mkt.setdefault(
+                    "resolution_metadata",
+                    {
+                        "station": loc["station"],
+                        "unit": loc["unit"],
+                        "resolution_text": "",
+                        "resolution_source": "",
+                        "rounding_rule": "",
+                    },
+                )
+                mkt.setdefault("market_contracts", [])
+                mkt.setdefault(
+                    "scan_guardrails",
+                    {
+                        "admissible": False,
+                        "skip_reasons": [],
+                        "weather_fresh": False,
+                        "mapping_ok": False,
+                        "unit_ok": False,
+                    },
+                )
+                mkt.setdefault("last_scan_status", "pending")
+                mkt.setdefault("last_scan_at", None)
+                mkt.setdefault("last_scan_reason", None)
+
+            mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
+            mkt["event_id"] = event.get("id", mkt.get("event_id", ""))
 
             # Skip if market already resolved
             if mkt["status"] == "resolved":
                 continue
 
+            snap = snapshots.get(date, {})
+            resolution_metadata = extract_resolution_metadata(event, loc)
+            contract_payload = build_market_contracts(event, loc["unit"])
+            verdict = evaluate_market_guardrails(
+                loc, resolution_metadata, contract_payload, snap, hours
+            )
+
+            mkt["resolution_metadata"] = resolution_metadata
+            mkt["market_contracts"] = contract_payload["contracts"]
+            mkt["scan_guardrails"] = {
+                "admissible": verdict["admissible"],
+                "skip_reasons": verdict["skip_reasons"],
+                "weather_fresh": not any(
+                    reason in verdict["skip_reasons"]
+                    for reason in ["weather_data_missing", "weather_data_stale"]
+                ),
+                "mapping_ok": "missing_rule_mapping" not in verdict["skip_reasons"],
+                "unit_ok": "unit_mismatch" not in verdict["skip_reasons"],
+            }
+            mkt["last_scan_at"] = snap.get("ts")
+            mkt["last_scan_reason"] = (
+                verdict["skip_reasons"][0] if verdict["skip_reasons"] else None
+            )
+
+            if not verdict["admissible"]:
+                mkt["last_scan_status"] = "skipped"
+                mkt["all_outcomes"] = []
+                save_market(mkt)
+                print(
+                    f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
+                )
+                time.sleep(0.1)
+                continue
+
+            mkt["last_scan_status"] = "ready"
+
             # Update outcomes list — prices taken directly from event
             outcomes = []
-            for market in event.get("markets", []):
-                question = market.get("question", "")
-                mid = str(market.get("id", ""))
-                volume = float(market.get("volume", 0))
-                rng = parse_temp_range(question)
-                if not rng:
+            event_markets = {
+                str(market.get("id", "")): market for market in event.get("markets", [])
+            }
+            for contract in mkt["market_contracts"]:
+                market = event_markets.get(contract.get("market_id"))
+                if not market:
                     continue
                 try:
                     prices = json.loads(market.get("outcomePrices", "[0.5,0.5]"))
@@ -926,14 +992,18 @@ def scan_and_update():
                     continue
                 outcomes.append(
                     {
-                        "question": question,
-                        "market_id": mid,
-                        "range": rng,
+                        "question": contract["question"],
+                        "market_id": contract["market_id"],
+                        "range": contract["range"],
+                        "condition_id": contract["condition_id"],
+                        "token_id_yes": contract["token_id_yes"],
+                        "token_id_no": contract["token_id_no"],
+                        "unit": contract.get("unit"),
                         "bid": round(bid, 4),
                         "ask": round(ask, 4),
                         "price": round(bid, 4),  # for compatibility
                         "spread": round(ask - bid, 4),
-                        "volume": round(volume, 0),
+                        "volume": round(float(market.get("volume", 0)), 0),
                     }
                 )
 
@@ -941,7 +1011,6 @@ def scan_and_update():
             mkt["all_outcomes"] = outcomes
 
             # Forecast snapshot
-            snap = snapshots.get(date, {})
             forecast_snap = {
                 "ts": snap.get("ts"),
                 "horizon": horizon,

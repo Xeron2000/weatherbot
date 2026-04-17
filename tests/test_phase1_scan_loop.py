@@ -117,6 +117,15 @@ def test_scan_loop_continues_after_rejecting_one_market(
     good_event = copy.deepcopy(phase1_gamma_event)
     good_event["id"] = "evt-chicago-2026-04-17"
     good_event["slug"] = "highest-temperature-in-chicago-on-april-17-2026"
+    good_event["title"] = "Highest temperature in Chicago on April 17, 2026?"
+    good_event["description"] = (
+        "Temperature resolves from the official O'Hare Airport observations."
+    )
+    good_event["rules"] = (
+        "This market resolves based on the highest temperature recorded at "
+        "O'Hare Airport (KORD) in °F. Temperatures are rounded to the nearest "
+        "whole degree using the official airport reading."
+    )
     for market in good_event["markets"]:
         market["id"] = market["id"].replace("nyc", "chicago")
         market["conditionId"] = market["conditionId"].replace("nyc", "chicago")
