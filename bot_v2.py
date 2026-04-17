@@ -262,13 +262,74 @@ def norm_cdf(x):
 
 
 def bucket_prob(forecast, t_low, t_high, sigma=None):
-    """For regular buckets — exact match. For edge buckets — normal distribution."""
+    """Returns probability mass for a bucket using a normal approximation."""
     s = sigma or 2.0
     if t_low == -999:
         return norm_cdf((t_high - float(forecast)) / s)
     if t_high == 999:
         return 1.0 - norm_cdf((t_low - float(forecast)) / s)
-    return 1.0 if in_bucket(forecast, t_low, t_high) else 0.0
+    upper = norm_cdf((t_high - float(forecast)) / s)
+    lower = norm_cdf((t_low - float(forecast)) / s)
+    return max(0.0, min(1.0, upper - lower))
+
+
+def normalize_probability_weights(weights):
+    total = sum(weights)
+    if total <= 0:
+        return []
+    return [w / total for w in weights]
+
+
+def get_source_sigma(city_slug, source, source_sigmas=None):
+    if source_sigmas and source in source_sigmas and source_sigmas[source] is not None:
+        return source_sigmas[source]
+    cal_source = "metar" if source == "metar_anchor" else source
+    return get_sigma(city_slug, cal_source)
+
+
+def aggregate_probability(
+    contracts, source_forecasts, source_sigmas=None, city_slug=None
+):
+    records = []
+
+    for contract in contracts:
+        t_low, t_high = contract["range"]
+        per_source = {}
+        source_values = []
+
+        for source in ["ecmwf", "hrrr", "metar_anchor"]:
+            forecast = source_forecasts.get(source)
+            if forecast is None:
+                per_source[source] = None
+                continue
+            sigma = get_source_sigma(city_slug, source, source_sigmas)
+            prob = bucket_prob(forecast, t_low, t_high, sigma=sigma)
+            per_source[source] = round(prob, 6)
+            source_values.append(prob)
+
+        agg = sum(source_values) / len(source_values) if source_values else 0.0
+        records.append(
+            {
+                "question": contract.get("question"),
+                "market_id": contract.get("market_id"),
+                "range": contract["range"],
+                "condition_id": contract.get("condition_id"),
+                "token_id_yes": contract.get("token_id_yes"),
+                "token_id_no": contract.get("token_id_no"),
+                "per_source_probability": per_source,
+                "aggregate_probability": agg,
+            }
+        )
+
+    normalized = normalize_probability_weights(
+        [record["aggregate_probability"] for record in records]
+    )
+    for record, agg in zip(records, normalized):
+        record["aggregate_probability"] = round(agg, 6)
+        record["fair_yes"] = record["aggregate_probability"]
+        record["fair_no"] = 1.0 - record["aggregate_probability"]
+
+    return records
 
 
 def calc_ev(p, price):
