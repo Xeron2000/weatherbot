@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 
 import bot_v2
 
@@ -10,6 +11,51 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def load_fixture(name):
     with (FIXTURES / name).open("r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+class DummyResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+
+def configure_runtime_paths(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    markets_dir = data_dir / "markets"
+    data_dir.mkdir()
+    markets_dir.mkdir()
+    monkeypatch.setattr(bot_v2, "DATA_DIR", data_dir)
+    monkeypatch.setattr(bot_v2, "MARKETS_DIR", markets_dir)
+    monkeypatch.setattr(bot_v2, "STATE_FILE", data_dir / "state.json")
+    monkeypatch.setattr(bot_v2, "CALIBRATION_FILE", data_dir / "calibration.json")
+
+
+def patch_scan_inputs(monkeypatch, city_events, city_snapshots):
+    monkeypatch.setattr(bot_v2.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        bot_v2,
+        "requests",
+        type(
+            "RequestsStub",
+            (),
+            {"get": staticmethod(lambda *_args, **_kwargs: DummyResponse({}))},
+        )(),
+    )
+
+    def fake_take_forecast_snapshot(city_slug, dates):
+        snapshots = {
+            date: {"ts": None, "best": None, "best_source": None} for date in dates
+        }
+        snapshots.update(city_snapshots.get(city_slug, {}))
+        return snapshots
+
+    def fake_get_polymarket_event(city_slug, month, day, year):
+        return city_events.get((city_slug, f"{year:04d}-{month}-{day:02d}"))
+
+    monkeypatch.setattr(bot_v2, "take_forecast_snapshot", fake_take_forecast_snapshot)
+    monkeypatch.setattr(bot_v2, "get_polymarket_event", fake_get_polymarket_event)
 
 
 def build_market_contracts(event):
@@ -79,3 +125,103 @@ def test_aggregate_probability_outputs_fair_yes_and_no_for_all_buckets():
         assert 0.0 <= record["aggregate_probability"] <= 1.0
         assert record["fair_yes"] == record["aggregate_probability"]
         assert record["fair_no"] == 1.0 - record["aggregate_probability"]
+
+
+def test_scan_and_update_persists_bucket_probabilities_for_admissible_market(
+    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    city = "nyc"
+    today = datetime.now(timezone.utc)
+    target_date = today.strftime("%Y-%m-%d")
+    month = bot_v2.MONTHS[today.month - 1]
+    now_ts = today.isoformat()
+    event = dict(phase2_gamma_event)
+    event["endDate"] = f"{target_date}T23:59:00Z"
+    event["rules"] = (
+        "This market resolves based on the highest temperature recorded at "
+        "LaGuardia Airport (KLGA) in °F. Temperatures are rounded to the nearest "
+        "whole degree using the official airport reading."
+    )
+
+    monkeypatch.setattr(bot_v2, "LOCATIONS", {city: bot_v2.LOCATIONS[city]})
+    patch_scan_inputs(
+        monkeypatch,
+        {(city, f"{today.year:04d}-{month}-{today.day:02d}"): event},
+        {
+            city: {
+                target_date: {
+                    "ts": now_ts,
+                    "ecmwf": phase2_weather_snapshot["sources"]["ecmwf"],
+                    "hrrr": phase2_weather_snapshot["sources"]["hrrr"],
+                    "metar": phase2_weather_snapshot["sources"]["metar_anchor"],
+                    "best": phase2_weather_snapshot["sources"]["ecmwf"],
+                    "best_source": "ecmwf",
+                }
+            }
+        },
+    )
+
+    bot_v2.scan_and_update()
+    market = bot_v2.load_market(city, target_date)
+
+    assert market["last_scan_status"] == "ready"
+    assert len(market["bucket_probabilities"]) == len(market["market_contracts"])
+    assert (
+        market["bucket_probabilities"][0]["range"]
+        == market["market_contracts"][0]["range"]
+    )
+
+
+def test_scan_and_update_clears_stale_bucket_probabilities_for_skipped_market(
+    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    city = "nyc"
+    today = datetime.now(timezone.utc)
+    target_date = today.strftime("%Y-%m-%d")
+    month = bot_v2.MONTHS[today.month - 1]
+    now_ts = today.isoformat()
+
+    monkeypatch.setattr(bot_v2, "LOCATIONS", {city: bot_v2.LOCATIONS[city]})
+    good_event = dict(phase2_gamma_event)
+    good_event["endDate"] = f"{target_date}T23:59:00Z"
+    good_event["rules"] = (
+        "This market resolves based on the highest temperature recorded at "
+        "LaGuardia Airport (KLGA) in °F. Temperatures are rounded to the nearest "
+        "whole degree using the official airport reading."
+    )
+    bad_event = dict(good_event)
+    bad_event["rules"] = good_event["rules"].replace("°F", "°C")
+
+    snapshots = {
+        city: {
+            target_date: {
+                "ts": now_ts,
+                "ecmwf": phase2_weather_snapshot["sources"]["ecmwf"],
+                "hrrr": phase2_weather_snapshot["sources"]["hrrr"],
+                "metar": phase2_weather_snapshot["sources"]["metar_anchor"],
+                "best": phase2_weather_snapshot["sources"]["ecmwf"],
+                "best_source": "ecmwf",
+            }
+        }
+    }
+
+    patch_scan_inputs(
+        monkeypatch,
+        {(city, f"{today.year:04d}-{month}-{today.day:02d}"): good_event},
+        snapshots,
+    )
+    bot_v2.scan_and_update()
+
+    patch_scan_inputs(
+        monkeypatch,
+        {(city, f"{today.year:04d}-{month}-{today.day:02d}"): bad_event},
+        snapshots,
+    )
+    bot_v2.scan_and_update()
+
+    market = bot_v2.load_market(city, target_date)
+
+    assert market["last_scan_status"] == "skipped"
+    assert market["bucket_probabilities"] == []
