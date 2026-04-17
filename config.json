@@ -36,5 +36,13 @@
     "per_city_cap_pct": 0.18,
     "per_date_cap_pct": 0.18,
     "per_event_cap_pct": 0.18
+  },
+  "order_policy": {
+    "yes_time_in_force": "GTC",
+    "no_time_in_force": "GTD",
+    "gtd_buffer_hours": 6.0,
+    "price_improve_ticks": 1,
+    "replace_edge_buffer": 0.02,
+    "max_order_hours_open": 72.0
   }
 }
