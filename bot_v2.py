@@ -91,6 +91,46 @@ def load_risk_router_config(config_dict):
 
 RISK_ROUTER = load_risk_router_config(_cfg)
 
+
+def load_order_policy_config(config_dict):
+    policy = {
+        "yes_time_in_force": "GTC",
+        "no_time_in_force": "GTD",
+        "gtd_buffer_hours": 6.0,
+        "price_improve_ticks": 1,
+        "replace_edge_buffer": 0.02,
+        "max_order_hours_open": 72.0,
+    }
+    raw = config_dict.get("order_policy", {}) or {}
+    tif_keys = ["yes_time_in_force", "no_time_in_force"]
+    for key in tif_keys:
+        value = str(raw.get(key, policy[key]) or policy[key]).upper()
+        if value not in {"GTC", "GTD"}:
+            value = policy[key]
+        policy[key] = value
+    float_keys = ["gtd_buffer_hours", "replace_edge_buffer", "max_order_hours_open"]
+    for key in float_keys:
+        value = raw.get(key, policy[key])
+        try:
+            value = float(value)
+        except Exception:
+            value = policy[key]
+        if value <= 0:
+            value = policy[key]
+        policy[key] = round(value, 6)
+    value = raw.get("price_improve_ticks", policy["price_improve_ticks"])
+    try:
+        value = int(value)
+    except Exception:
+        value = policy["price_improve_ticks"]
+    if value < 0:
+        value = policy["price_improve_ticks"]
+    policy["price_improve_ticks"] = value
+    return policy
+
+
+ORDER_POLICY = load_order_policy_config(_cfg)
+
 MAX_BET = YES_STRATEGY.get("max_size", _cfg.get("max_bet", 20.0))  # compatibility
 MIN_EV = _cfg.get("min_ev", 0.10)
 MAX_PRICE = YES_STRATEGY.get("max_price", _cfg.get("max_price", 0.45))
@@ -1500,6 +1540,180 @@ def build_reserved_exposure(market, decision, reserved_at):
     }
 
 
+# =============================================================================
+# PHASE 4 ORDER HELPERS
+# =============================================================================
+
+
+def find_assessment_for_reservation(market):
+    reservation = market.get("reserved_exposure")
+    if not reservation:
+        return None
+    for assessment in market.get("candidate_assessments", []) or []:
+        if assessment_matches_reservation(assessment, reservation):
+            return assessment
+    return None
+
+
+def find_quote_for_market(quote_snapshot, market_id):
+    for quote in quote_snapshot or []:
+        if quote.get("market_id") == market_id:
+            return quote
+    return None
+
+
+def resolve_market_id_for_range(market, assessment):
+    target_range = list(assessment.get("range") or [])
+    for contract in market.get("market_contracts", []) or []:
+        if list(contract.get("range") or []) == target_range:
+            return contract.get("market_id")
+    return None
+
+
+def compute_passive_limit_price(side_quote, policy):
+    bid = side_quote.get("bid")
+    ask = side_quote.get("ask")
+    tick_size = side_quote.get("tick_size")
+    if tick_size is None:
+        return None, "tick_size_missing"
+    try:
+        tick_size = float(tick_size)
+    except Exception:
+        return None, "tick_size_missing"
+    if tick_size <= 0:
+        return None, "tick_size_missing"
+    if bid is None or ask is None:
+        return None, "quote_price_missing"
+    try:
+        bid = float(bid)
+        ask = float(ask)
+    except Exception:
+        return None, "quote_price_missing"
+    improve_ticks = int(policy.get("price_improve_ticks", 0) or 0)
+    candidate = bid + (tick_size * improve_ticks)
+    candidate = max(candidate, bid)
+    if ask > bid:
+        candidate = min(candidate, ask - tick_size)
+    candidate = round(candidate, 6)
+    if candidate <= 0:
+        return None, "quote_price_missing"
+    return round(candidate, 4), None
+
+
+def build_passive_order_intent(market, reservation, assessment, quote_snapshot, now_ts):
+    if not reservation:
+        return {"order": None, "reason": "reservation_missing"}
+    if not assessment or assessment.get("status") != "accepted":
+        return {"order": None, "reason": "route_not_accepted"}
+    market_id = resolve_market_id_for_range(market, assessment)
+    if not market_id:
+        return {"order": None, "reason": "market_contract_missing"}
+    quote = find_quote_for_market(quote_snapshot, market_id)
+    if not quote:
+        return {"order": None, "reason": "quote_snapshot_missing"}
+    token_side = assessment.get("token_side")
+    side_quote = (quote.get(token_side) if token_side in {"yes", "no"} else None) or {}
+    if not side_quote:
+        return {"order": None, "reason": "quote_snapshot_missing"}
+    limit_price, reason = compute_passive_limit_price(side_quote, ORDER_POLICY)
+    if reason:
+        return {"order": None, "reason": reason}
+    reserved_worst_loss = float(reservation.get("reserved_worst_loss", 0.0) or 0.0)
+    if reserved_worst_loss <= 0:
+        return {"order": None, "reason": "reserved_worst_loss_missing"}
+    shares = round(reserved_worst_loss / limit_price, 4)
+    tif_key = "yes_time_in_force" if token_side == "yes" else "no_time_in_force"
+    time_in_force = ORDER_POLICY.get(tif_key, "GTC")
+    expires_at = None
+    if time_in_force == "GTD":
+        try:
+            expires_at = (
+                datetime.fromisoformat(now_ts)
+                + timedelta(hours=ORDER_POLICY.get("gtd_buffer_hours", 6.0))
+            ).isoformat()
+        except Exception:
+            expires_at = None
+    order = {
+        "order_id": f"{market_id}:{token_side}:{int(datetime.fromisoformat(now_ts).timestamp())}",
+        "strategy_leg": reservation.get("strategy_leg"),
+        "token_side": token_side,
+        "market_id": market_id,
+        "range": list(assessment.get("range") or []),
+        "limit_price": limit_price,
+        "shares": shares,
+        "filled_shares": 0.0,
+        "remaining_shares": shares,
+        "time_in_force": time_in_force,
+        "expires_at": expires_at,
+        "status": "planned",
+        "status_reason": "accepted_route",
+        "created_at": now_ts,
+        "updated_at": now_ts,
+        "history": [
+            {
+                "status": "planned",
+                "reason": "accepted_route",
+                "ts": now_ts,
+                "fill_shares": 0.0,
+                "fill_price": None,
+            }
+        ],
+    }
+    return {"order": order, "reason": None}
+
+
+def apply_order_transition(
+    order,
+    next_status,
+    reason,
+    ts,
+    fill_shares=0.0,
+    fill_price=None,
+    patch=None,
+):
+    allowed = {"planned", "working", "partial", "filled", "canceled", "expired"}
+    if next_status not in allowed:
+        raise ValueError(f"unsupported_order_status:{next_status}")
+    updated = dict(order or {})
+    history = list(updated.get("history", []) or [])
+    delta = round(float(fill_shares or 0.0), 4)
+    updated["filled_shares"] = round(
+        float(updated.get("filled_shares", 0.0) or 0.0) + delta,
+        4,
+    )
+    total_shares = round(float(updated.get("shares", 0.0) or 0.0), 4)
+    updated["remaining_shares"] = round(
+        max(0.0, total_shares - updated["filled_shares"]),
+        4,
+    )
+    updated["status"] = next_status
+    updated["status_reason"] = reason
+    updated["updated_at"] = ts
+    if patch:
+        updated.update(patch)
+    history.append(
+        {
+            "status": next_status,
+            "reason": reason,
+            "ts": ts,
+            "fill_shares": delta,
+            "fill_price": fill_price,
+        }
+    )
+    updated["history"] = history
+    return updated
+
+
+def is_order_terminal(order):
+    return (order or {}).get("status") in {"filled", "canceled", "expired"}
+
+
+def ensure_market_order_defaults(market):
+    market.setdefault("active_order", None)
+    market.setdefault("order_history", [])
+    return market
+
+
 def route_market_candidates(
     market,
     risk_state,
@@ -1615,7 +1829,7 @@ def market_path(city_slug, date_str):
 def load_market(city_slug, date_str):
     p = market_path(city_slug, date_str)
     if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
+        return ensure_market_order_defaults(json.loads(p.read_text(encoding="utf-8")))
     return None
 
 
@@ -1628,7 +1842,9 @@ def load_all_markets():
     markets = []
     for f in MARKETS_DIR.glob("*.json"):
         try:
-            markets.append(json.loads(f.read_text(encoding="utf-8")))
+            markets.append(
+                ensure_market_order_defaults(json.loads(f.read_text(encoding="utf-8")))
+            )
         except Exception:
             pass
     return markets
@@ -1677,6 +1893,8 @@ def new_market(city_slug, date_str, event, hours):
         "candidate_assessments": [],
         "route_decisions": [],
         "reserved_exposure": None,
+        "active_order": None,
+        "order_history": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1830,6 +2048,7 @@ def scan_and_update():
                 mkt.setdefault("candidate_assessments", [])
                 mkt.setdefault("route_decisions", [])
                 mkt.setdefault("reserved_exposure", None)
+                ensure_market_order_defaults(mkt)
 
             mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
             mkt["event_id"] = event.get("id", mkt.get("event_id", ""))

@@ -270,7 +270,7 @@ def test_apply_order_transition_normalizes_statuses_and_appends_history():
     assert current["filled_shares"] == 50.0
     assert current["remaining_shares"] == 150.0
     assert [item["status"] for item in current["history"]] == statuses
-    assert current["history"][-1]["fill_shares"] == 25.0
+    assert current["history"][3]["fill_shares"] == 25.0
     assert bot_v2.is_order_terminal(current) is True
 
 
