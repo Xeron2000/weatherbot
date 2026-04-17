@@ -40,7 +40,7 @@
 
 ### Observability
 
-- [ ] **OBS-01**: 操作者可以查看每个候选机会为何被接受、拒绝、缩量或降价
+- [x] **OBS-01**: 操作者可以查看每个候选机会为何被接受、拒绝、缩量或降价
 - [ ] **OBS-02**: 操作者可以查看每笔订单为何被挂出、刷新、撤销、部分成交或完全成交
 - [ ] **OBS-03**: 操作者可以查看按策略腿、城市、日期和市场维度聚合的风险、PnL、fill quality 与未成交统计
 - [ ] **OBS-04**: 操作者可以导出结构化执行日志，用于后续复盘、调参与 live readiness 审核
@@ -95,7 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RISK-01 | Phase 3 | Pending |
 | RISK-02 | Phase 3 | Pending |
 | RISK-03 | Phase 2 | Complete |
-| OBS-01 | Phase 2 | Pending |
+| OBS-01 | Phase 2 | Complete |
 | OBS-02 | Phase 4 | Pending |
 | OBS-03 | Phase 6 | Pending |
 | OBS-04 | Phase 6 | Pending |

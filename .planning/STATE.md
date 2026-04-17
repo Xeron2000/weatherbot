@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-04-17T12:06:04.211Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-04-17T12:10:24.932Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | Phase 02 P01 | 3 min | 2 tasks | 5 files |
 | Phase 02 P02 | 2 min | 2 tasks | 5 files |
 | Phase 02 P03 | 1 min | 2 tasks | 3 files |
+| Phase 02 P04 | 1 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 02]: scan loop 继续保持 ready/skipped 语义层不变，但把 execution stop reasons 独立落进 quote_snapshot。
 - [Phase 02]: 策略配置拆成 yes_strategy/no_strategy 两个独立块，不再让单一 max_price/min_ev 统治所有腿。
 - [Phase 02]: candidate_assessments 直接持久化到 market JSON，作为后续报告与订单层共用事实源。
+- [Phase 02]: reporting 直接读取 candidate_assessments，不在展示层重算 fair price、status 或 reasons。
+- [Phase 02]: 候选摘要继续与持仓/战绩统计分离，避免把 candidate 数混进 open/resolved trade 指标。
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T12:06:04.209Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-04-17T12:10:24.930Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
