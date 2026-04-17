@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-04-17T14:32:30.203Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-17T15:17:09.750Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_plans: 16
+  completed_plans: 13
+  percent: 81
 ---
 
 # Project State
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** 在天气市场里稳定抓住“概率对、价格错”的盘口，并用可验证的自动化执行把高赔率机会变成可重复策略。
-**Current focus:** Phase 03 — 资金路由与暴露控制
+**Current focus:** Phase 04 — 被动挂单与订单恢复
 
 ## Current Position
 
-Phase: 03 (资金路由与暴露控制) — PLANNED
-Plan: 4 of 4 executed
+Phase: 04 (被动挂单与订单恢复) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P02 | 15 min | 2 tasks | 2 files |
 | Phase 03 P03 | 14 min | 2 tasks | 2 files |
 | Phase 03 P04 | 10 min | 2 tasks | 3 files |
+| Phase 04 P01 | 4 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Recent decisions affecting current work:
 - [Phase 03]: risk_router 作为独立顶层配置块落地，集中定义 YES/NO budget 与 hard cap。
 - [Phase 03]: risk_state 采用从 market reservations 回放重建的账本模式，避免 scan 过程内存态漂移。
 - [Phase 03]: 已有 reservation 在连续扫描中优先保留，新冲突候选统一拒绝并保留 release_reason。
+- [Phase 04]: build_passive_order_intent 返回 {order, reason} 包装，既保留纯函数合同，也能给 wiring 层稳定失败原因。
+- [Phase 04]: 旧 market JSON 通过 loader/backfill 自动补 active_order 与 order_history，避免 Phase 4 恢复逻辑因缺字段崩溃。
 
 ### Pending Todos
 
@@ -105,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T14:32:30.201Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-04-17T15:17:09.747Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

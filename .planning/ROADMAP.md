@@ -79,7 +79,13 @@ Plans:
   2. 每笔订单都能被查看为 planned、working、partial、filled、canceled 或 expired 之一，且状态变化连续可追踪。
   3. 当天气预测或盘口变化让原报价变差时，机器人会自动刷新、撤销或放弃挂单，并说明原因。
   4. 机器人重启后可以恢复未完成订单、持仓和事件账本，操作者不会因为重启失去订单一致性。
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 04-01-PLAN.md — 建立被动订单配置、限价意图与状态机 helper 合同
+- [ ] 04-02-PLAN.md — 将 passive order lifecycle 接入 scan loop 并处理 refresh/cancel/fill
+- [ ] 04-03-PLAN.md — 恢复未终结订单并在 restart 后继续 resume working/partial order
+- [ ] 04-04-PLAN.md — 在 status/report 中展示订单生命周期并补 README 验证说明
 
 ### Phase 5: 保守 paper execution 与回放验证
 **Goal**: 操作者可以在不使用真实资金的前提下运行完整模拟执行，并检验被动挂单假设是否足够保守。
@@ -112,6 +118,6 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 2.1 → 3 → 4 → 5 → 6
 | 1. 市场语义与扫描基线 | 4/4 | Complete | 2026-04-17 |
 | 2. 候选定价与双策略筛选 | 0/TBD | Not started | - |
 | 3. 资金路由与暴露控制 | 0/4 | Planned | - |
-| 4. 被动挂单与订单恢复 | 0/TBD | Not started | - |
+| 4. 被动挂单与订单恢复 | 1/4 | In Progress|  |
 | 5. 保守 paper execution 与回放验证 | 0/TBD | Not started | - |
 | 6. 执行复盘与 readiness 报告 | 0/TBD | Not started | - |
