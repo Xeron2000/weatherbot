@@ -2318,6 +2318,81 @@ def print_scan_summary(markets):
     print_candidate_assessments(markets)
 
 
+def print_risk_summary(state):
+    risk_state = state.get("risk_state") or {}
+    if not risk_state:
+        return
+
+    bankroll = float(risk_state.get("bankroll", 0.0) or 0.0)
+    global_reserved = float(risk_state.get("global_reserved_worst_loss", 0.0) or 0.0)
+    usage_pct = (global_reserved / bankroll * 100.0) if bankroll else 0.0
+
+    print(f"\n  Risk usage")
+    for leg in ["YES_SNIPER", "NO_CARRY"]:
+        leg_state = (risk_state.get("legs", {}) or {}).get(leg, {}) or {}
+        budget = float(leg_state.get("budget", 0.0) or 0.0)
+        reserved = float(leg_state.get("reserved", 0.0) or 0.0)
+        available = max(0.0, budget - reserved)
+        print(
+            f"    {leg:<10} budget={budget:.2f} reserved={reserved:.2f} available={available:.2f}"
+        )
+    print(
+        f"    global_reserved_worst_loss={global_reserved:.2f} usage={usage_pct:.1f}%"
+    )
+
+
+def print_exposure_summary(state):
+    risk_state = state.get("risk_state") or {}
+    if not risk_state:
+        return
+
+    sections = [
+        ("City exposure", risk_state.get("city_exposure", {}) or {}),
+        ("Date exposure", risk_state.get("date_exposure", {}) or {}),
+        ("Event exposure", risk_state.get("event_exposure", {}) or {}),
+    ]
+    for title, ledger in sections:
+        print(f"\n  {title}")
+        if not ledger:
+            print("    none")
+            continue
+        for key, value in sorted(ledger.items()):
+            print(f"    {key}: {float(value):.2f}")
+
+
+def print_route_decision_summary(markets):
+    accepted = 0
+    rejected = 0
+    released = 0
+    reason_counts = {}
+
+    for market in markets:
+        for decision in market.get("route_decisions", []) or []:
+            status = decision.get("status")
+            if status == "accepted":
+                accepted += 1
+            elif status == "rejected":
+                rejected += 1
+            for reason in decision.get("reasons", []) or []:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        reservation = market.get("reserved_exposure")
+        if reservation and reservation.get("release_reason"):
+            released += 1
+            reason = reservation.get("release_reason")
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    print(
+        f"\n  Route decisions: accepted={accepted} rejected={rejected} released={released}"
+    )
+    if not reason_counts:
+        print("    reasons=none")
+        return
+    summary = ", ".join(
+        f"{reason}={count}" for reason, count in sorted(reason_counts.items())
+    )
+    print(f"    reasons={summary}")
+
+
 def print_status():
     state = load_state()
     markets = load_all_markets()
@@ -2351,7 +2426,9 @@ def print_status():
     print(f"  Open:        {len(open_pos)}")
     print(f"  Resolved:    {len(resolved)}")
 
+    print_risk_summary(state)
     print_scan_summary(markets)
+    print_route_decision_summary(markets)
 
     if open_pos:
         print(f"\n  Open positions:")
@@ -2388,6 +2465,7 @@ def print_status():
 
 
 def print_report():
+    state = load_state()
     markets = load_all_markets()
     resolved = [
         m for m in markets if m["status"] == "resolved" and m.get("pnl") is not None
@@ -2397,7 +2475,10 @@ def print_report():
     print(f"  WEATHERBET — FULL REPORT")
     print(f"{'=' * 55}")
 
+    print_risk_summary(state)
+    print_exposure_summary(state)
     print_scan_summary(markets)
+    print_route_decision_summary(markets)
 
     if not resolved:
         print("  No resolved markets yet.")
