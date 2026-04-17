@@ -81,6 +81,7 @@ def make_quote_snapshot(
 def patch_scan_inputs(monkeypatch, city, event, snapshot_sequence):
     monkeypatch.setattr(bot_v2.time, "sleep", lambda *_args, **_kwargs: None)
     calls = {"snapshot": 0}
+    target_dt = datetime.strptime(event["target_date"], "%Y-%m-%d")
 
     def fake_take_forecast_snapshot(city_slug, dates):
         idx = min(calls["snapshot"], len(snapshot_sequence) - 1)
@@ -93,7 +94,11 @@ def patch_scan_inputs(monkeypatch, city, event, snapshot_sequence):
     def fake_get_polymarket_event(city_slug, month, day, year):
         if city_slug != city:
             return None
-        if f"{year:04d}-{month}-{day:02d}" != event["target_date"]:
+        if (
+            year != target_dt.year
+            or month != bot_v2.MONTHS[target_dt.month - 1]
+            or day != target_dt.day
+        ):
             return None
         return event["payload"]
 

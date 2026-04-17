@@ -1634,7 +1634,10 @@ def build_passive_order_intent(market, reservation, assessment, quote_snapshot, 
         except Exception:
             expires_at = None
     order = {
-        "order_id": f"{market_id}:{token_side}:{int(datetime.fromisoformat(now_ts).timestamp())}",
+        "order_id": (
+            f"{market_id}:{reservation.get('strategy_leg')}:{token_side}:"
+            f"{assessment.get('range')[0]}-{assessment.get('range')[1]}:{limit_price:.4f}"
+        ),
         "strategy_leg": reservation.get("strategy_leg"),
         "token_side": token_side,
         "market_id": market_id,
@@ -1712,6 +1715,306 @@ def ensure_market_order_defaults(market):
     market.setdefault("active_order", None)
     market.setdefault("order_history", [])
     return market
+
+
+def find_route_for_reservation(market):
+    reservation = market.get("reserved_exposure") or {}
+    for route in market.get("route_decisions", []) or []:
+        if (
+            route.get("strategy_leg") == reservation.get("strategy_leg")
+            and route.get("token_side") == reservation.get("token_side")
+            and list(route.get("range") or []) == list(reservation.get("range") or [])
+        ):
+            return route
+    return None
+
+
+def archive_order(market, order):
+    if not order:
+        return
+    ensure_market_order_defaults(market)
+    market.setdefault("order_history", []).append(dict(order))
+    market["active_order"] = None
+
+
+def average_order_fill_price(order):
+    total_shares = 0.0
+    total_cost = 0.0
+    for item in (order or {}).get("history", []) or []:
+        fill_shares = float(item.get("fill_shares", 0.0) or 0.0)
+        fill_price = item.get("fill_price")
+        if fill_shares <= 0 or fill_price is None:
+            continue
+        total_shares += fill_shares
+        total_cost += fill_shares * float(fill_price)
+    if total_shares <= 0:
+        return round(float((order or {}).get("limit_price", 0.0) or 0.0), 4)
+    return round(total_cost / total_shares, 4)
+
+
+def build_position_from_order(market, order, assessment, forecast_snap):
+    filled_shares = round(float((order or {}).get("filled_shares", 0.0) or 0.0), 4)
+    if filled_shares <= 0:
+        return None
+
+    entry_price = average_order_fill_price(order)
+    rng = list((order or {}).get("range") or [None, None])
+    quote_ctx = (assessment or {}).get("quote_context", {}) or {}
+    fair_price = (assessment or {}).get("fair_price")
+    if fair_price is None:
+        fair_price = (
+            (assessment or {}).get("fair_yes")
+            if (order or {}).get("token_side") == "yes"
+            else (assessment or {}).get("fair_no")
+        )
+    edge = (assessment or {}).get("edge")
+    if edge is None and fair_price is not None:
+        edge = round(float(fair_price) - entry_price, 6)
+
+    position = {
+        "market_id": order.get("market_id"),
+        "question": next(
+            (
+                contract.get("question")
+                for contract in market.get("market_contracts", []) or []
+                if contract.get("market_id") == order.get("market_id")
+            ),
+            None,
+        ),
+        "bucket_low": rng[0],
+        "bucket_high": rng[1],
+        "entry_price": entry_price,
+        "bid_at_entry": quote_ctx.get("bid"),
+        "spread": quote_ctx.get("spread"),
+        "shares": filled_shares,
+        "cost": round(filled_shares * entry_price, 2),
+        "p": round(
+            float((assessment or {}).get("aggregate_probability", 0.0) or 0.0), 4
+        ),
+        "ev": round(float(edge or 0.0), 4),
+        "kelly": None,
+        "forecast_temp": (forecast_snap or {}).get("best"),
+        "forecast_src": (forecast_snap or {}).get("best_source"),
+        "sigma": None,
+        "opened_at": order.get("updated_at"),
+        "status": "open",
+        "pnl": None,
+        "exit_price": None,
+        "close_reason": None,
+        "closed_at": None,
+    }
+    return position
+
+
+def maybe_release_order_reservation(market, risk_state, reason, ts):
+    if reason not in {
+        "candidate_downgraded",
+        "candidate_missing",
+        "market_no_longer_ready",
+        "expired",
+        "route_not_accepted",
+    }:
+        return
+    reservation = market.get("reserved_exposure")
+    if reservation and not reservation.get("release_reason"):
+        release_reserved_exposure(market, risk_state, reason, released_at=ts)
+
+
+def transition_order_terminal(market, risk_state, order, next_status, reason, ts):
+    terminal = apply_order_transition(order, next_status, reason, ts)
+    archive_order(market, terminal)
+    maybe_release_order_reservation(market, risk_state, reason, ts)
+    return terminal
+
+
+def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
+    ensure_market_order_defaults(market)
+    ts = (
+        (forecast_snap or {}).get("ts")
+        or market.get("last_scan_at")
+        or datetime.now(timezone.utc).isoformat()
+    )
+    active_order = market.get("active_order")
+
+    if active_order and is_order_terminal(active_order):
+        archive_order(market, active_order)
+        active_order = None
+
+    if not market_ready:
+        if active_order:
+            transition_order_terminal(
+                market,
+                risk_state,
+                active_order,
+                "canceled",
+                "market_no_longer_ready",
+                ts,
+            )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if (
+        market.get("position")
+        and market["position"].get("status") == "open"
+        and not active_order
+    ):
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    reservation = market.get("reserved_exposure")
+    assessment = find_assessment_for_reservation(market)
+    route = find_route_for_reservation(market)
+
+    if active_order and reservation and reservation.get("release_reason"):
+        transition_order_terminal(
+            market,
+            risk_state,
+            active_order,
+            "canceled",
+            reservation.get("release_reason"),
+            ts,
+        )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if active_order and not reservation:
+        transition_order_terminal(
+            market, risk_state, active_order, "canceled", "candidate_missing", ts
+        )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if active_order and assessment is None:
+        transition_order_terminal(
+            market, risk_state, active_order, "canceled", "candidate_missing", ts
+        )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if active_order and assessment.get("status") != "accepted":
+        transition_order_terminal(
+            market, risk_state, active_order, "canceled", "candidate_downgraded", ts
+        )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if active_order and route and route.get("status") != "accepted":
+        transition_order_terminal(
+            market, risk_state, active_order, "canceled", "route_not_accepted", ts
+        )
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if not reservation or not assessment:
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    built = build_passive_order_intent(
+        market,
+        reservation,
+        assessment,
+        market.get("quote_snapshot", []),
+        ts,
+    )
+
+    active_order = market.get("active_order")
+    if active_order:
+        if active_order.get("expires_at"):
+            try:
+                if datetime.fromisoformat(
+                    active_order["expires_at"]
+                ) <= datetime.fromisoformat(ts):
+                    transition_order_terminal(
+                        market, risk_state, active_order, "expired", "expired", ts
+                    )
+                    return {"filled_cost": 0.0, "opened_position": False}
+            except Exception:
+                pass
+        else:
+            max_open_hours = float(
+                ORDER_POLICY.get("max_order_hours_open", 72.0) or 72.0
+            )
+            try:
+                created_at = datetime.fromisoformat(
+                    active_order.get("created_at") or ts
+                )
+                if (
+                    datetime.fromisoformat(ts) - created_at
+                ).total_seconds() / 3600 > max_open_hours:
+                    transition_order_terminal(
+                        market, risk_state, active_order, "expired", "expired", ts
+                    )
+                    return {"filled_cost": 0.0, "opened_position": False}
+            except Exception:
+                pass
+
+    replacement_order = None
+    active_order = market.get("active_order")
+    if active_order and built.get("order"):
+        new_limit = float(built["order"].get("limit_price", 0.0) or 0.0)
+        old_limit = float(active_order.get("limit_price", 0.0) or 0.0)
+        if abs(new_limit - old_limit) > float(
+            ORDER_POLICY.get("replace_edge_buffer", 0.02) or 0.02
+        ):
+            transition_order_terminal(
+                market, risk_state, active_order, "canceled", "quote_repriced", ts
+            )
+            replacement_order = built["order"]
+            active_order = None
+
+    if market.get("active_order") is None and built.get("order"):
+        replacement_order = replacement_order or built["order"]
+        market["active_order"] = apply_order_transition(
+            replacement_order,
+            "working",
+            "order_submitted",
+            ts,
+        )
+
+    active_order = market.get("active_order")
+    if not active_order:
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    quote = find_quote_for_market(
+        market.get("quote_snapshot", []), active_order.get("market_id")
+    )
+    side_quote = (
+        quote.get(active_order.get("token_side"))
+        if quote and active_order.get("token_side") in {"yes", "no"}
+        else None
+    ) or {}
+    ask = safe_float(side_quote.get("ask"))
+    ask_size = safe_float(side_quote.get("ask_size"))
+    if ask is None or ask_size is None:
+        return {"filled_cost": 0.0, "opened_position": False}
+    if ask > float(active_order.get("limit_price", 0.0) or 0.0):
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    fill_shares = round(
+        min(ask_size, float(active_order.get("remaining_shares", 0.0) or 0.0)), 4
+    )
+    if fill_shares <= 0:
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    next_status = (
+        "filled"
+        if fill_shares >= float(active_order.get("remaining_shares", 0.0) or 0.0)
+        else "partial"
+    )
+    transitioned = apply_order_transition(
+        active_order,
+        next_status,
+        "quote_touched_limit",
+        ts,
+        fill_shares=fill_shares,
+        fill_price=ask,
+    )
+    if next_status == "partial":
+        market["active_order"] = transitioned
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    archive_order(market, transitioned)
+    market["position"] = build_position_from_order(
+        market, transitioned, assessment, forecast_snap
+    )
+    return {
+        "filled_cost": round(
+            float((market.get("position") or {}).get("cost", 0.0) or 0.0), 2
+        ),
+        "opened_position": market.get("position") is not None,
+    }
 
 
 def route_market_candidates(
@@ -2082,15 +2385,7 @@ def scan_and_update():
             )
 
             if not verdict["admissible"]:
-                if mkt.get("reserved_exposure") and not mkt["reserved_exposure"].get(
-                    "release_reason"
-                ):
-                    release_reserved_exposure(
-                        mkt,
-                        risk_state,
-                        "market_no_longer_ready",
-                        released_at=snap.get("ts"),
-                    )
+                sync_market_order(mkt, risk_state, snap, market_ready=False)
                 mkt["last_scan_status"] = "skipped"
                 mkt["all_outcomes"] = []
                 mkt["bucket_probabilities"] = []
@@ -2185,6 +2480,11 @@ def scan_and_update():
 
             forecast_temp = snap.get("best")
             best_source = snap.get("best_source")
+            order_update = sync_market_order(mkt, risk_state, snap, market_ready=True)
+            if order_update.get("opened_position"):
+                balance -= order_update.get("filled_cost", 0.0)
+                state["total_trades"] += 1
+                new_pos += 1
 
             # --- STOP-LOSS AND TRAILING STOP ---
             if mkt.get("position") and mkt["position"].get("status") == "open":
@@ -2260,111 +2560,6 @@ def scan_and_update():
                         closed += 1
                         print(
                             f"  [CLOSE] {loc['name']} {date} — forecast changed | PnL: {'+' if pnl >= 0 else ''}{pnl:.2f}"
-                        )
-
-            # --- OPEN POSITION ---
-            if (
-                not mkt.get("position")
-                and forecast_temp is not None
-                and hours >= MIN_HOURS
-            ):
-                sigma = get_sigma(city_slug, best_source or "ecmwf")
-                best_signal = None
-
-                # Find exactly ONE bucket that matches the forecast
-                # If forecast doesn't fit any bucket cleanly — skip this market
-                matched_bucket = None
-                for o in outcomes:
-                    t_low, t_high = o["range"]
-                    if in_bucket(forecast_temp, t_low, t_high):
-                        matched_bucket = o
-                        break
-
-                if matched_bucket:
-                    approved_yes_route = next(
-                        (
-                            route
-                            for route in mkt.get("route_decisions", [])
-                            if route.get("status") == "accepted"
-                            and route.get("strategy_leg") == "YES_SNIPER"
-                            and tuple(route.get("range") or ())
-                            == tuple(matched_bucket.get("range") or ())
-                        ),
-                        None,
-                    )
-                    if not approved_yes_route:
-                        matched_bucket = None
-
-                if matched_bucket:
-                    o = matched_bucket
-                    t_low, t_high = o["range"]
-                    volume = o["volume"]
-                    quote_entry = next(
-                        (
-                            q
-                            for q in mkt.get("quote_snapshot", [])
-                            if q.get("market_id") == o.get("market_id")
-                        ),
-                        None,
-                    )
-                    yes_quote = quote_entry.get("yes", {}) if quote_entry else {}
-                    bid = yes_quote.get("bid")
-                    ask = yes_quote.get("ask")
-                    spread = yes_quote.get("spread")
-
-                    # All filters — if any fails, skip this market entirely
-                    if (
-                        quote_entry
-                        and quote_entry.get("execution_ok")
-                        and bid is not None
-                        and ask is not None
-                        and spread is not None
-                        and volume >= MIN_VOLUME
-                    ):
-                        p = bucket_prob(forecast_temp, t_low, t_high, sigma)
-                        ev = calc_ev(p, ask)
-                        if ev >= MIN_EV:
-                            kelly = calc_kelly(p, ask)
-                            size = bet_size(kelly, balance)
-                            if size >= 0.50:
-                                best_signal = {
-                                    "market_id": o["market_id"],
-                                    "question": o["question"],
-                                    "bucket_low": t_low,
-                                    "bucket_high": t_high,
-                                    "entry_price": ask,
-                                    "bid_at_entry": bid,
-                                    "spread": spread,
-                                    "shares": round(size / ask, 2),
-                                    "cost": size,
-                                    "p": round(p, 4),
-                                    "ev": round(ev, 4),
-                                    "kelly": round(kelly, 4),
-                                    "forecast_temp": forecast_temp,
-                                    "forecast_src": best_source,
-                                    "sigma": sigma,
-                                    "opened_at": snap.get("ts"),
-                                    "status": "open",
-                                    "pnl": None,
-                                    "exit_price": None,
-                                    "close_reason": None,
-                                    "closed_at": None,
-                                }
-
-                if best_signal:
-                    if (
-                        best_signal["spread"] <= MAX_SLIPPAGE
-                        and best_signal["entry_price"] < MAX_PRICE
-                    ):
-                        balance -= best_signal["cost"]
-                        mkt["position"] = best_signal
-                        state["total_trades"] += 1
-                        new_pos += 1
-                        bucket_label = f"{best_signal['bucket_low']}-{best_signal['bucket_high']}{unit_sym}"
-                        print(
-                            f"  [BUY]  {loc['name']} {horizon} {date} | {bucket_label} | "
-                            f"${best_signal['entry_price']:.3f} | EV {best_signal['ev']:+.2f} | "
-                            f"${best_signal['cost']:.2f} ({best_signal['forecast_src'].upper()})"
                         )
 
             # Market closed by time
