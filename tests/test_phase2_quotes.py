@@ -210,3 +210,54 @@ def test_scan_and_update_persists_quote_snapshots_with_execution_stop_reasons(
     assert market["quote_snapshot"][0]["yes"]["ask"] == 0.34
     assert market["quote_snapshot"][0]["no"]["book_ok"] is False
     assert "orderbook_empty" in market["quote_snapshot"][0]["execution_stop_reasons"]
+
+
+def test_monitor_positions_uses_yes_token_quote_for_exit_price(
+    phase2_clob_book_yes, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(bot_v2, "LOCATIONS", {"nyc": bot_v2.LOCATIONS["nyc"]})
+    monkeypatch.setattr(bot_v2.time, "sleep", lambda *_args, **_kwargs: None)
+    install_quote_requests(
+        monkeypatch,
+        {
+            "book": {"yes-65-69": phase2_clob_book_yes},
+            "tick_size": {"yes-65-69": {"minimum_tick_size": "0.01"}},
+        },
+    )
+
+    market = {
+        "city": "nyc",
+        "date": "2026-04-17",
+        "event_end_date": "2026-04-18T23:59:00Z",
+        "position": {
+            "market_id": "mkt-65-69",
+            "entry_price": 0.34,
+            "shares": 10.0,
+            "cost": 3.4,
+            "status": "open",
+            "stop_price": 0.32,
+        },
+        "all_outcomes": [
+            {
+                "market_id": "mkt-65-69",
+                "token_id_yes": "yes-65-69",
+                "bid": 0.2,
+                "price": 0.21,
+            }
+        ],
+        "quote_snapshot": [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"token_id": "yes-65-69"},
+                "no": {},
+            }
+        ],
+    }
+    bot_v2.save_market(market)
+
+    closed = bot_v2.monitor_positions()
+    updated = bot_v2.load_market("nyc", "2026-04-17")
+
+    assert closed == 1
+    assert updated["position"]["exit_price"] == 0.31

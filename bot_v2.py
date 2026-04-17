@@ -1676,18 +1676,25 @@ def monitor_positions():
         pos = mkt["position"]
         mid = pos["market_id"]
 
-        # Fetch real bestBid from Polymarket API — actual sell price
         current_price = None
-        try:
-            r = requests.get(
-                f"https://gamma-api.polymarket.com/markets/{mid}", timeout=(3, 5)
-            )
-            mdata = r.json()
-            best_bid = mdata.get("bestBid")
-            if best_bid is not None:
-                current_price = float(best_bid)
-        except Exception:
-            pass
+
+        quote_entry = next(
+            (q for q in mkt.get("quote_snapshot", []) if q.get("market_id") == mid),
+            None,
+        )
+        yes_token_id = None
+        if quote_entry:
+            yes_token_id = quote_entry.get("yes", {}).get("token_id")
+        if yes_token_id is None:
+            for o in mkt.get("all_outcomes", []):
+                if o["market_id"] == mid:
+                    yes_token_id = o.get("token_id_yes")
+                    break
+
+        if yes_token_id:
+            quote = get_token_quote_snapshot(yes_token_id, "yes")
+            if quote.get("book_ok") and quote.get("bid") is not None:
+                current_price = quote["bid"]
 
         # Fallback to cached price if API failed
         if current_price is None:
