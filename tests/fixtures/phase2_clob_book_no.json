@@ -1,0 +1,13 @@
+{
+  "market": "0xphase2no",
+  "asset_id": "no-65-69",
+  "bids": [
+    {"price": "0.66", "size": "100.0"}
+  ],
+  "asks": [
+    {"price": "0.70", "size": "130.0"}
+  ],
+  "min_order_size": "5",
+  "neg_risk": true,
+  "closed": false
+}

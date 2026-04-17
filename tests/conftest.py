@@ -35,3 +35,13 @@ def phase2_gamma_event():
 @pytest.fixture
 def phase2_weather_snapshot():
     return _load_fixture("phase2_weather_snapshot.json")
+
+
+@pytest.fixture
+def phase2_clob_book_yes():
+    return _load_fixture("phase2_clob_book_yes.json")
+
+
+@pytest.fixture
+def phase2_clob_book_no():
+    return _load_fixture("phase2_clob_book_no.json")

@@ -1,0 +1,15 @@
+{
+  "market": "0xphase2yes",
+  "asset_id": "yes-65-69",
+  "bids": [
+    {"price": "0.31", "size": "120.0"},
+    {"price": "0.30", "size": "85.0"}
+  ],
+  "asks": [
+    {"price": "0.34", "size": "140.0"},
+    {"price": "0.35", "size": "90.0"}
+  ],
+  "min_order_size": "5",
+  "neg_risk": true,
+  "closed": false
+}
