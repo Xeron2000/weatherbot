@@ -29,9 +29,6 @@ with open("config.json", encoding="utf-8") as f:
     _cfg = json.load(f)
 
 BALANCE = _cfg.get("balance", 10000.0)
-MAX_BET = _cfg.get("max_bet", 20.0)  # max bet per trade
-MIN_EV = _cfg.get("min_ev", 0.10)
-MAX_PRICE = _cfg.get("max_price", 0.45)
 MIN_VOLUME = _cfg.get("min_volume", 500)
 MIN_HOURS = _cfg.get("min_hours", 2.0)
 MAX_HOURS = _cfg.get("max_hours", 72.0)
@@ -40,6 +37,35 @@ MAX_SLIPPAGE = _cfg.get("max_slippage", 0.03)  # max allowed ask-bid spread
 SCAN_INTERVAL = _cfg.get("scan_interval", 3600)  # every hour
 CALIBRATION_MIN = _cfg.get("calibration_min", 30)
 VC_KEY = _cfg.get("vc_key", "")
+
+YES_STRATEGY = _cfg.get(
+    "yes_strategy",
+    {
+        "max_price": 0.25,
+        "min_probability": 0.14,
+        "min_edge": 0.03,
+        "min_hours": MIN_HOURS,
+        "max_hours": MAX_HOURS,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    },
+)
+NO_STRATEGY = _cfg.get(
+    "no_strategy",
+    {
+        "min_price": 0.65,
+        "min_probability": 0.70,
+        "min_edge": 0.04,
+        "min_hours": MIN_HOURS,
+        "max_hours": MAX_HOURS,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    },
+)
+
+MAX_BET = YES_STRATEGY.get("max_size", _cfg.get("max_bet", 20.0))  # compatibility
+MIN_EV = _cfg.get("min_ev", 0.10)
+MAX_PRICE = YES_STRATEGY.get("max_price", _cfg.get("max_price", 0.45))
 
 SIGMA_F = 2.0
 SIGMA_C = 1.2
@@ -900,6 +926,173 @@ def build_quote_snapshot(contracts):
     return snapshots
 
 
+def quote_for_side(quote_snapshot, side):
+    if not quote_snapshot:
+        return {}
+    return quote_snapshot.get(side, {})
+
+
+def strategy_hours_ok(strategy_cfg, hours):
+    return (
+        strategy_cfg.get("min_hours", MIN_HOURS)
+        <= hours
+        <= strategy_cfg.get("max_hours", MAX_HOURS)
+    )
+
+
+def determine_size_multiplier(edge, min_edge):
+    if edge >= min_edge * 2:
+        return 1.0, "accepted"
+    if edge >= min_edge:
+        return 0.5, "size_down"
+    return 0.0, "rejected"
+
+
+def evaluate_yes_candidate(bucket_probability, quote_snapshot, hours):
+    reasons = []
+    quote = quote_for_side(quote_snapshot, "yes")
+    fair_price = bucket_probability.get("fair_yes")
+    ask = quote.get("ask")
+    reasons.extend(
+        missing_strategy_fields(
+            YES_STRATEGY,
+            [
+                "max_price",
+                "min_probability",
+                "min_edge",
+                "min_hours",
+                "max_hours",
+                "max_size",
+                "min_size",
+            ],
+        )
+    )
+
+    if not strategy_hours_ok(YES_STRATEGY, hours):
+        reasons.append("outside_strategy_window")
+    if quote_snapshot and quote_snapshot.get("execution_stop_reasons"):
+        reasons.extend(quote_snapshot.get("execution_stop_reasons", []))
+    if ask is None:
+        reasons.append("missing_quote_price")
+    if ask is not None and ask > YES_STRATEGY.get("max_price", 1.0):
+        reasons.append("price_above_max")
+    if bucket_probability.get("aggregate_probability", 0.0) < YES_STRATEGY.get(
+        "min_probability", 0.0
+    ):
+        reasons.append("probability_below_min")
+
+    edge = round((fair_price or 0.0) - (ask or 0.0), 6) if ask is not None else None
+    if edge is None:
+        status = "rejected"
+        size_multiplier = 0.0
+    else:
+        size_multiplier, status = determine_size_multiplier(
+            edge, YES_STRATEGY.get("min_edge", 0.0)
+        )
+    if "price_above_max" in reasons:
+        status = "reprice"
+        size_multiplier = 0.0
+    if any(reason != "price_above_max" for reason in reasons):
+        status = "rejected"
+        size_multiplier = 0.0
+
+    return {
+        "strategy_leg": "YES_SNIPER",
+        "token_side": "yes",
+        "range": bucket_probability.get("range"),
+        "aggregate_probability": bucket_probability.get("aggregate_probability"),
+        "fair_price": fair_price,
+        "fair_yes": bucket_probability.get("fair_yes"),
+        "fair_no": bucket_probability.get("fair_no"),
+        "quote_context": quote,
+        "status": status,
+        "reasons": normalize_skip_reasons(reasons),
+        "size_multiplier": size_multiplier,
+        "edge": edge,
+    }
+
+
+def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
+    reasons = []
+    quote = quote_for_side(quote_snapshot, "no")
+    fair_price = bucket_probability.get("fair_no")
+    bid = quote.get("bid")
+    reasons.extend(
+        missing_strategy_fields(
+            NO_STRATEGY,
+            [
+                "min_price",
+                "min_probability",
+                "min_edge",
+                "min_hours",
+                "max_hours",
+                "max_size",
+                "min_size",
+            ],
+        )
+    )
+
+    if not strategy_hours_ok(NO_STRATEGY, hours):
+        reasons.append("outside_strategy_window")
+    if quote_snapshot and quote_snapshot.get("execution_stop_reasons"):
+        reasons.extend(quote_snapshot.get("execution_stop_reasons", []))
+    if bid is None:
+        reasons.append("missing_quote_price")
+    if bid is not None and bid < NO_STRATEGY.get("min_price", 0.0):
+        reasons.append("price_below_min")
+    if bucket_probability.get("fair_no", 0.0) < NO_STRATEGY.get("min_probability", 0.0):
+        reasons.append("probability_below_min")
+
+    edge = round((bid or 0.0) - (fair_price or 0.0), 6) if bid is not None else None
+    if edge is None:
+        status = "rejected"
+        size_multiplier = 0.0
+    else:
+        size_multiplier, status = determine_size_multiplier(
+            edge, NO_STRATEGY.get("min_edge", 0.0)
+        )
+    if "price_below_min" in reasons:
+        status = "reprice"
+        size_multiplier = 0.0
+    if any(reason != "price_below_min" for reason in reasons):
+        status = "rejected"
+        size_multiplier = 0.0
+
+    return {
+        "strategy_leg": "NO_CARRY",
+        "token_side": "no",
+        "range": bucket_probability.get("range"),
+        "aggregate_probability": bucket_probability.get("aggregate_probability"),
+        "fair_price": fair_price,
+        "fair_yes": bucket_probability.get("fair_yes"),
+        "fair_no": bucket_probability.get("fair_no"),
+        "quote_context": quote,
+        "status": status,
+        "reasons": normalize_skip_reasons(reasons),
+        "size_multiplier": size_multiplier,
+        "edge": edge,
+    }
+
+
+def build_candidate_assessments(bucket_probabilities, quote_snapshot, hours):
+    assessments = []
+    quote_by_market = {entry.get("market_id"): entry for entry in quote_snapshot or []}
+    for bucket in bucket_probabilities or []:
+        quote = quote_by_market.get(bucket.get("market_id"), {})
+        yes_candidate = evaluate_yes_candidate(bucket, quote, hours)
+        no_candidate = evaluate_no_candidate(bucket, quote, hours)
+        assessments.extend([yes_candidate, no_candidate])
+    return assessments
+
+
+def missing_strategy_fields(strategy_cfg, required_fields):
+    missing = []
+    for field in required_fields:
+        if strategy_cfg.get(field) is None:
+            missing.append(f"config_missing_{field}")
+    return missing
+
+
 # =============================================================================
 # MARKET DATA STORAGE
 # Each market is stored in a separate file: data/markets/{city}_{date}.json
@@ -972,6 +1165,7 @@ def new_market(city_slug, date_str, event, hours):
         "all_outcomes": [],  # all market buckets
         "bucket_probabilities": [],
         "quote_snapshot": [],
+        "candidate_assessments": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1108,6 +1302,7 @@ def scan_and_update():
                 mkt.setdefault("last_scan_reason", None)
                 mkt.setdefault("bucket_probabilities", [])
                 mkt.setdefault("quote_snapshot", [])
+                mkt.setdefault("candidate_assessments", [])
 
             mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
             mkt["event_id"] = event.get("id", mkt.get("event_id", ""))
@@ -1145,6 +1340,7 @@ def scan_and_update():
                 mkt["all_outcomes"] = []
                 mkt["bucket_probabilities"] = []
                 mkt["quote_snapshot"] = []
+                mkt["candidate_assessments"] = []
                 save_market(mkt)
                 print(
                     f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
@@ -1198,6 +1394,11 @@ def scan_and_update():
                 city_slug=city_slug,
             )
             mkt["quote_snapshot"] = build_quote_snapshot(mkt["market_contracts"])
+            mkt["candidate_assessments"] = build_candidate_assessments(
+                mkt["bucket_probabilities"],
+                mkt["quote_snapshot"],
+                hours,
+            )
 
             # Forecast snapshot
             forecast_snap = {
