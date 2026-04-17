@@ -25,5 +25,16 @@
     "max_hours": 72.0,
     "max_size": 20.0,
     "min_size": 1.0
+  },
+  "risk_router": {
+    "yes_budget_pct": 0.3,
+    "no_budget_pct": 0.7,
+    "yes_leg_cap_pct": 0.3,
+    "no_leg_cap_pct": 0.7,
+    "global_usage_cap_pct": 0.85,
+    "per_market_cap_pct": 0.08,
+    "per_city_cap_pct": 0.18,
+    "per_date_cap_pct": 0.18,
+    "per_event_cap_pct": 0.18
   }
 }

@@ -63,6 +63,34 @@ NO_STRATEGY = _cfg.get(
     },
 )
 
+
+def load_risk_router_config(config_dict):
+    router = {
+        "yes_budget_pct": 0.30,
+        "no_budget_pct": 0.70,
+        "yes_leg_cap_pct": 0.30,
+        "no_leg_cap_pct": 0.70,
+        "global_usage_cap_pct": 0.85,
+        "per_market_cap_pct": 0.08,
+        "per_city_cap_pct": 0.18,
+        "per_date_cap_pct": 0.18,
+        "per_event_cap_pct": 0.18,
+    }
+    raw = config_dict.get("risk_router", {}) or {}
+    for key, default in router.items():
+        value = raw.get(key, default)
+        try:
+            value = float(value)
+        except Exception:
+            value = default
+        if value <= 0:
+            value = default
+        router[key] = round(value, 6)
+    return router
+
+
+RISK_ROUTER = load_risk_router_config(_cfg)
+
 MAX_BET = YES_STRATEGY.get("max_size", _cfg.get("max_bet", 20.0))  # compatibility
 MIN_EV = _cfg.get("min_ev", 0.10)
 MAX_PRICE = YES_STRATEGY.get("max_price", _cfg.get("max_price", 0.45))
@@ -1093,6 +1121,204 @@ def missing_strategy_fields(strategy_cfg, required_fields):
     return missing
 
 
+def normalize_route_reason_codes(reasons):
+    normalized = []
+    for reason in reasons or []:
+        if reason and reason not in normalized:
+            normalized.append(reason)
+    return normalized
+
+
+def strategy_for_leg(strategy_leg):
+    if strategy_leg == "YES_SNIPER":
+        return YES_STRATEGY
+    if strategy_leg == "NO_CARRY":
+        return NO_STRATEGY
+    return {}
+
+
+def candidate_worst_loss(assessment, bankroll):
+    strategy = strategy_for_leg(assessment.get("strategy_leg"))
+    max_size = float(strategy.get("max_size", 0.0) or 0.0)
+    min_size = float(strategy.get("min_size", 0.0) or 0.0)
+    size_multiplier = float(assessment.get("size_multiplier", 0.0) or 0.0)
+
+    if max_size <= 0 or size_multiplier <= 0:
+        return 0.0
+
+    worst_loss = max_size * size_multiplier
+    if worst_loss < min_size:
+        worst_loss = min_size
+    return round(min(max_size, worst_loss), 2)
+
+
+def assessment_liquidity(assessment):
+    quote = assessment.get("quote_context", {}) or {}
+    sizes = []
+    for field in ["bid_size", "ask_size", "size", "liquidity"]:
+        value = quote.get(field)
+        if value is not None:
+            sizes.append(float(value))
+    if sizes:
+        return round(sum(sizes), 6)
+    return 0.0
+
+
+def sort_leg_candidates(assessments):
+    return sorted(
+        assessments or [],
+        key=lambda item: (
+            -(item.get("edge") if item.get("edge") is not None else -999.0),
+            -assessment_liquidity(item),
+        ),
+    )
+
+
+def build_exposure_keys(city_slug_or_market, date_str=None, assessment=None):
+    market = city_slug_or_market if isinstance(city_slug_or_market, dict) else {}
+    city_slug = market.get("city", city_slug_or_market)
+    date_value = market.get("date", date_str)
+    assessment = assessment or market.get("assessment", {})
+    rng = assessment.get("range") or (None, None)
+    bucket = (
+        f"{rng[0]}-{rng[1]}" if rng[0] is not None and rng[1] is not None else "unknown"
+    )
+    event_id = market.get("event_id") or market.get("event_slug") or "event"
+    event_key = f"{city_slug}|{date_value}|{event_id}"
+    return {
+        "market": f"{city_slug}|{date_value}|{bucket}",
+        "city": city_slug,
+        "date": date_value,
+        "event": event_key,
+        "bucket": bucket,
+    }
+
+
+def route_candidate_assessment(assessment, market, risk_state, router_cfg):
+    allowed = {"accepted", "size_down", "reprice", "rejected"}
+    input_status = assessment.get("status")
+    reasons = list(assessment.get("reasons", []) or [])
+    if input_status not in allowed:
+        reasons.append("invalid_candidate_status")
+        input_status = "rejected"
+
+    keys = build_exposure_keys(market, assessment=assessment)
+    bankroll = float(risk_state.get("bankroll", 0.0) or 0.0)
+    strategy_leg = assessment.get("strategy_leg")
+    leg_state = (risk_state.get("legs", {}) or {}).get(strategy_leg, {}) or {}
+    reserved_worst_loss = candidate_worst_loss(assessment, bankroll)
+    decision = {
+        "strategy_leg": strategy_leg,
+        "token_side": assessment.get("token_side"),
+        "range": assessment.get("range"),
+        "input_status": assessment.get("status"),
+        "status": "rejected",
+        "reserved_worst_loss": 0.0,
+        "budget_bucket": strategy_leg,
+        "reasons": normalize_route_reason_codes(reasons),
+        "exposure_keys": keys,
+    }
+
+    if input_status not in {"accepted", "size_down"}:
+        return decision
+
+    for reservation in risk_state.get("active_reservations", []) or []:
+        if reservation.get("event") != keys["event"]:
+            continue
+        if reservation.get("bucket") == keys["bucket"]:
+            if reservation.get("token_side") != assessment.get("token_side"):
+                decision["reasons"] = normalize_route_reason_codes(
+                    decision["reasons"] + ["same_bucket_conflict"]
+                )
+                return decision
+            continue
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["event_cluster_conflict"]
+        )
+        return decision
+
+    leg_reserved = float(leg_state.get("reserved", 0.0) or 0.0)
+    leg_budget = float(
+        leg_state.get(
+            "budget",
+            bankroll
+            * (
+                router_cfg.get("yes_budget_pct", 0.0)
+                if strategy_leg == "YES_SNIPER"
+                else router_cfg.get("no_budget_pct", 0.0)
+            ),
+        )
+        or 0.0
+    )
+    leg_cap = float(
+        leg_state.get(
+            "hard_cap",
+            bankroll
+            * (
+                router_cfg.get("yes_leg_cap_pct", 0.0)
+                if strategy_leg == "YES_SNIPER"
+                else router_cfg.get("no_leg_cap_pct", 0.0)
+            ),
+        )
+        or 0.0
+    )
+    if leg_reserved + reserved_worst_loss > leg_cap:
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["leg_cap_exceeded"]
+        )
+        return decision
+    if leg_reserved + reserved_worst_loss > leg_budget:
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["leg_budget_exceeded"]
+        )
+        return decision
+
+    if float(
+        risk_state.get("global_reserved_worst_loss", 0.0) or 0.0
+    ) + reserved_worst_loss > bankroll * router_cfg.get("global_usage_cap_pct", 0.0):
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["global_cap_exceeded"]
+        )
+        return decision
+
+    if float(
+        (risk_state.get("market_exposure", {}) or {}).get(keys["market"], 0.0) or 0.0
+    ) + reserved_worst_loss > bankroll * router_cfg.get("per_market_cap_pct", 0.0):
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["market_cap_exceeded"]
+        )
+        return decision
+
+    if float(
+        (risk_state.get("city_exposure", {}) or {}).get(keys["city"], 0.0) or 0.0
+    ) + reserved_worst_loss > bankroll * router_cfg.get("per_city_cap_pct", 0.0):
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["city_cap_exceeded"]
+        )
+        return decision
+
+    if float(
+        (risk_state.get("date_exposure", {}) or {}).get(keys["date"], 0.0) or 0.0
+    ) + reserved_worst_loss > bankroll * router_cfg.get("per_date_cap_pct", 0.0):
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["date_cap_exceeded"]
+        )
+        return decision
+
+    if float(
+        (risk_state.get("event_exposure", {}) or {}).get(keys["event"], 0.0) or 0.0
+    ) + reserved_worst_loss > bankroll * router_cfg.get("per_event_cap_pct", 0.0):
+        decision["reasons"] = normalize_route_reason_codes(
+            decision["reasons"] + ["event_cap_exceeded"]
+        )
+        return decision
+
+    decision["status"] = "accepted"
+    decision["reserved_worst_loss"] = reserved_worst_loss
+    decision["reasons"] = normalize_route_reason_codes(decision["reasons"])
+    return decision
+
+
 # =============================================================================
 # MARKET DATA STORAGE
 # Each market is stored in a separate file: data/markets/{city}_{date}.json
@@ -1748,7 +1974,7 @@ def print_scan_summary(markets):
             token_id_yes = contract.get("token_id_yes") or "unknown"
             token_id_no = contract.get("token_id_no") or "unknown"
             print(
-                f"    {m['city_name']:<16} {m['date']} | {station} | {bucket:<12} | {market_id} | {unit} | {resolution_text} | condition_id={condition_id} | yes={token_id_yes} | no={token_id_no}"
+                f"    {m['city_name']:<16} {m['date']} | {station} | {bucket:<12} | {market_id} | {unit} | resolution_text={resolution_text} | condition_id={condition_id} | token_id_yes={token_id_yes} | token_id_no={token_id_no}"
             )
 
     print(f"\n  Skipped scan markets: {len(skipped)}")
