@@ -1388,6 +1388,77 @@ def apply_reservation_to_risk_state(risk_state, reservation):
     risk_state.setdefault("active_reservations", []).append(active_reservation)
 
 
+def remove_reservation_from_risk_state(risk_state, reservation):
+    if not reservation:
+        return
+    reserved = float(reservation.get("reserved_worst_loss", 0.0) or 0.0)
+    if reserved <= 0:
+        return
+    strategy_leg = reservation.get("strategy_leg")
+    keys = reservation.get("exposure_keys", {}) or {}
+    if strategy_leg in risk_state.get("legs", {}):
+        risk_state["legs"][strategy_leg]["reserved"] = round(
+            max(
+                0.0,
+                float(risk_state["legs"][strategy_leg].get("reserved", 0.0) or 0.0)
+                - reserved,
+            ),
+            2,
+        )
+    risk_state["global_reserved_worst_loss"] = round(
+        max(
+            0.0,
+            float(risk_state.get("global_reserved_worst_loss", 0.0) or 0.0) - reserved,
+        ),
+        2,
+    )
+    for bucket_name in ["market", "city", "date", "event"]:
+        bucket_key = keys.get(bucket_name)
+        if bucket_key is None:
+            continue
+        ledger_name = f"{bucket_name}_exposure"
+        current = float(
+            (risk_state.get(ledger_name, {}) or {}).get(bucket_key, 0.0) or 0.0
+        )
+        updated = round(max(0.0, current - reserved), 2)
+        if updated == 0.0:
+            (risk_state.get(ledger_name, {}) or {}).pop(bucket_key, None)
+        else:
+            risk_state[ledger_name][bucket_key] = updated
+    remaining = []
+    for active in risk_state.get("active_reservations", []) or []:
+        if (
+            active.get("market") == keys.get("market")
+            and active.get("strategy_leg") == strategy_leg
+            and active.get("token_side") == reservation.get("token_side")
+            and active.get("bucket") == keys.get("bucket")
+        ):
+            continue
+        remaining.append(active)
+    risk_state["active_reservations"] = remaining
+
+
+def assessment_matches_reservation(assessment, reservation):
+    return (
+        assessment.get("strategy_leg") == reservation.get("strategy_leg")
+        and assessment.get("token_side") == reservation.get("token_side")
+        and list(assessment.get("range") or []) == list(reservation.get("range") or [])
+    )
+
+
+def release_reserved_exposure(market, risk_state, release_reason, released_at=None):
+    reservation = market.get("reserved_exposure")
+    if not reservation or reservation.get("release_reason"):
+        return None
+    remove_reservation_from_risk_state(risk_state, reservation)
+    released = dict(reservation)
+    released["release_reason"] = release_reason
+    released["released_at"] = released_at or datetime.now(timezone.utc).isoformat()
+    released["reserved_worst_loss"] = 0.0
+    market["reserved_exposure"] = released
+    return released
+
+
 def restore_risk_state_from_markets(state, markets, router_cfg):
     bankroll = float(state.get("starting_balance", BALANCE) or BALANCE)
     risk_state = build_empty_risk_state(bankroll, router_cfg)
@@ -1429,13 +1500,32 @@ def build_reserved_exposure(market, decision, reserved_at):
     }
 
 
-def route_market_candidates(market, risk_state, router_cfg, reserved_at=None):
+def route_market_candidates(
+    market,
+    risk_state,
+    router_cfg,
+    reserved_at=None,
+    kept_reservation=None,
+    initial_decisions=None,
+):
     assessments = market.get("candidate_assessments", []) or []
-    decisions = []
-    reserved_exposure = None
+    decisions = list(initial_decisions or [])
+    reserved_exposure = (
+        kept_reservation
+        if kept_reservation is not None
+        else market.get("reserved_exposure")
+    )
 
     for leg in ["YES_SNIPER", "NO_CARRY"]:
-        leg_assessments = [a for a in assessments if a.get("strategy_leg") == leg]
+        leg_assessments = []
+        for assessment in assessments:
+            if assessment.get("strategy_leg") != leg:
+                continue
+            if kept_reservation and assessment_matches_reservation(
+                assessment, kept_reservation
+            ):
+                continue
+            leg_assessments.append(assessment)
         for assessment in sort_leg_candidates(leg_assessments):
             decision = route_candidate_assessment(
                 assessment, market, risk_state, router_cfg
@@ -1452,6 +1542,64 @@ def route_market_candidates(market, risk_state, router_cfg, reserved_at=None):
     market["route_decisions"] = decisions
     market["reserved_exposure"] = reserved_exposure
     return decisions, reserved_exposure
+
+
+def reconcile_market_reservation(market, risk_state, router_cfg, reserved_at=None):
+    existing = market.get("reserved_exposure")
+    kept_reservation = None
+    decisions = []
+
+    if existing and not existing.get("release_reason"):
+        matching_assessment = next(
+            (
+                assessment
+                for assessment in market.get("candidate_assessments", []) or []
+                if assessment_matches_reservation(assessment, existing)
+            ),
+            None,
+        )
+
+        if matching_assessment is None:
+            release_reserved_exposure(
+                market, risk_state, "candidate_missing", reserved_at
+            )
+        elif matching_assessment.get("status") not in {"accepted", "size_down"}:
+            release_reserved_exposure(
+                market, risk_state, "candidate_downgraded", reserved_at
+            )
+        else:
+            remove_reservation_from_risk_state(risk_state, existing)
+            kept_decision = {
+                "strategy_leg": existing.get("strategy_leg"),
+                "token_side": existing.get("token_side"),
+                "range": list(existing.get("range") or []),
+                "input_status": matching_assessment.get("status"),
+                "status": "accepted",
+                "reserved_worst_loss": candidate_worst_loss(
+                    matching_assessment, risk_state.get("bankroll", 0.0)
+                ),
+                "budget_bucket": existing.get("budget_bucket"),
+                "reasons": normalize_route_reason_codes(
+                    matching_assessment.get("reasons", [])
+                ),
+                "exposure_keys": build_exposure_keys(
+                    market, assessment=matching_assessment
+                ),
+            }
+            kept_reservation = build_reserved_exposure(
+                market, kept_decision, reserved_at
+            )
+            apply_reservation_to_risk_state(risk_state, kept_reservation)
+            decisions.append(kept_decision)
+
+    return route_market_candidates(
+        market,
+        risk_state,
+        router_cfg,
+        reserved_at=reserved_at,
+        kept_reservation=kept_reservation,
+        initial_decisions=decisions,
+    )
 
 
 # =============================================================================
@@ -1715,13 +1863,21 @@ def scan_and_update():
             )
 
             if not verdict["admissible"]:
+                if mkt.get("reserved_exposure") and not mkt["reserved_exposure"].get(
+                    "release_reason"
+                ):
+                    release_reserved_exposure(
+                        mkt,
+                        risk_state,
+                        "market_no_longer_ready",
+                        released_at=snap.get("ts"),
+                    )
                 mkt["last_scan_status"] = "skipped"
                 mkt["all_outcomes"] = []
                 mkt["bucket_probabilities"] = []
                 mkt["quote_snapshot"] = []
                 mkt["candidate_assessments"] = []
                 mkt["route_decisions"] = []
-                mkt["reserved_exposure"] = None
                 save_market(mkt)
                 print(
                     f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
@@ -1780,7 +1936,7 @@ def scan_and_update():
                 mkt["quote_snapshot"],
                 hours,
             )
-            route_market_candidates(
+            reconcile_market_reservation(
                 mkt, risk_state, RISK_ROUTER, reserved_at=snap.get("ts")
             )
 
