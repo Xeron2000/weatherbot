@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-04-17T15:17:09.750Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-04-17T15:28:25.597Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
-  percent: 81
+  completed_plans: 14
+  percent: 88
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 04 (被动挂单与订单恢复) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -64,6 +64,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P03 | 14 min | 2 tasks | 2 files |
 | Phase 03 P04 | 10 min | 2 tasks | 3 files |
 | Phase 04 P01 | 4 min | 2 tasks | 3 files |
+| Phase 04 P02 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 已有 reservation 在连续扫描中优先保留，新冲突候选统一拒绝并保留 release_reason。
 - [Phase 04]: build_passive_order_intent 返回 {order, reason} 包装，既保留纯函数合同，也能给 wiring 层稳定失败原因。
 - [Phase 04]: 旧 market JSON 通过 loader/backfill 自动补 active_order 与 order_history，避免 Phase 4 恢复逻辑因缺字段崩溃。
+- [Phase 04]: scan_and_update 先调用 sync_market_order，再让既有 stop/forecast/resolution 逻辑继续消费 filled 后生成的 position。 — 把订单 lifecycle 变成运行时事实源，同时避免重写已有持仓管理路径。
+- [Phase 04]: refresh/cancel/expire 只读取 reserved_exposure、candidate_assessments、route_decisions 和 quote_snapshot，不在 wiring 层重算候选。 — 满足 threat model 对 persisted facts 的要求，避免状态漂移。
+- [Phase 04]: terminal 订单统一写入 order_history，partial 保持 active_order，filled/canceled/expired 则清空 active_order。 — 保证单 market 同时只有一笔 active_order，并保留完整终态审计轨迹。
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T15:17:09.747Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-04-17T15:28:11.230Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

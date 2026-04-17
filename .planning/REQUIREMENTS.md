@@ -23,7 +23,7 @@
 
 - [x] **ORDR-01**: 操作者可以让机器人为候选机会生成被动限价单意图，并支持 GTC 或带过期时间的 GTD 挂单
 - [x] **ORDR-02**: 操作者可以查看每笔订单的完整生命周期状态：planned、working、partial、filled、canceled、expired
-- [ ] **ORDR-03**: 操作者可以让机器人在天气预测或盘口变化后自动刷新、撤销或放弃已经变差的挂单
+- [x] **ORDR-03**: 操作者可以让机器人在天气预测或盘口变化后自动刷新、撤销或放弃已经变差的挂单
 - [ ] **ORDR-04**: 操作者可以在机器人重启后恢复未完成订单、持仓和事件账本，而不会丢失状态一致性
 
 ### Simulation & Validation
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRAT-04 | Phase 3 | Complete |
 | ORDR-01 | Phase 4 | Complete |
 | ORDR-02 | Phase 4 | Complete |
-| ORDR-03 | Phase 4 | Pending |
+| ORDR-03 | Phase 4 | Complete |
 | ORDR-04 | Phase 4 | Pending |
 | SIM-01 | Phase 5 | Pending |
 | SIM-02 | Phase 5 | Pending |
