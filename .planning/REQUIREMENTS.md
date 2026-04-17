@@ -7,7 +7,7 @@
 
 ### Market Universe
 
-- [ ] **MKT-01**: 操作者可以让机器人持续扫描配置好的城市与日期范围内的 Polymarket 天气温度市场
+- [x] **MKT-01**: 操作者可以让机器人持续扫描配置好的城市与日期范围内的 Polymarket 天气温度市场
 - [x] **MKT-02**: 操作者可以让机器人为每个候选市场保存正确的机场站点、温区、结算规则、condition/token 标识
 - [x] **MKT-03**: 操作者可以让机器人在市场缺少规则映射、单位不一致或天气数据过期时拒绝交易该市场
 - [ ] **MKT-04**: 操作者可以让机器人基于当前可执行盘口信息（bid/ask、tick size、市场状态）评估是否值得挂单
@@ -77,7 +77,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MKT-01 | Phase 1 | Pending |
+| MKT-01 | Phase 1 | Complete |
 | MKT-02 | Phase 1 | Complete |
 | MKT-03 | Phase 1 | Complete |
 | MKT-04 | Phase 2 | Pending |

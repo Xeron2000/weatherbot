@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-04-17T09:46:05.769Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-04-17T10:09:51.885Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 01 (市场语义与扫描基线) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: Stable
 
 | Phase 01 P01 | 3 min | 2 tasks | 6 files |
+| Phase 01 P02 | 4 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 2-5]: 完成标准优先自动扫描 + 被动挂单闭环，而不是方向性演示。
 - [Phase 01]: 保持 helper 留在 bot_v2.py 内，但必须做成纯函数接口，避免在 Phase 1 提前做包级重构。
 - [Phase 01]: 测试通过 fixture + 运行期断言暴露缺 helper 问题，避免 import/setup error 掩盖真实 RED 状态。
+- [Phase 01]: 将 event_slug/event_id、resolution_metadata、market_contracts、scan_guardrails 直接持久化到 market JSON，而不是额外拆存储层。
+- [Phase 01]: guardrail 失败时先写入 skipped 状态并保存，再 continue 到下一个 city/date，避免坏 market 污染候选 universe。
 
 ### Pending Todos
 
@@ -77,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T09:46:05.767Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-04-17T10:09:51.884Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
