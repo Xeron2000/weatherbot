@@ -10,7 +10,7 @@
 - [x] **MKT-01**: 操作者可以让机器人持续扫描配置好的城市与日期范围内的 Polymarket 天气温度市场
 - [x] **MKT-02**: 操作者可以让机器人为每个候选市场保存正确的机场站点、温区、结算规则、condition/token 标识
 - [x] **MKT-03**: 操作者可以让机器人在市场缺少规则映射、单位不一致或天气数据过期时拒绝交易该市场
-- [ ] **MKT-04**: 操作者可以让机器人基于当前可执行盘口信息（bid/ask、tick size、市场状态）评估是否值得挂单
+- [x] **MKT-04**: 操作者可以让机器人基于当前可执行盘口信息（bid/ask、tick size、市场状态）评估是否值得挂单
 
 ### Probability & Strategy
 
@@ -36,7 +36,7 @@
 
 - [ ] **RISK-01**: 操作者可以为单市场、单城市、单日期、单策略腿和总资金使用率设置暴露上限
 - [ ] **RISK-02**: 操作者可以阻止机器人在相关性过高的温区或相互冲突的 YES/NO 暴露上继续加仓
-- [ ] **RISK-03**: 操作者可以要求机器人在缺少关键市场元数据、规则映射或实时行情时自动停单
+- [x] **RISK-03**: 操作者可以要求机器人在缺少关键市场元数据、规则映射或实时行情时自动停单
 
 ### Observability
 
@@ -80,7 +80,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MKT-01 | Phase 1 | Complete |
 | MKT-02 | Phase 1 | Complete |
 | MKT-03 | Phase 1 | Complete |
-| MKT-04 | Phase 2 | Pending |
+| MKT-04 | Phase 2 | Complete |
 | STRAT-01 | Phase 2 | Complete |
 | STRAT-02 | Phase 2 | Pending |
 | STRAT-03 | Phase 2 | Pending |
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-03 | Phase 5 | Pending |
 | RISK-01 | Phase 3 | Pending |
 | RISK-02 | Phase 3 | Pending |
-| RISK-03 | Phase 2 | Pending |
+| RISK-03 | Phase 2 | Complete |
 | OBS-01 | Phase 2 | Pending |
 | OBS-02 | Phase 4 | Pending |
 | OBS-03 | Phase 6 | Pending |

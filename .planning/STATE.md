@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-04-17T11:52:48.222Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-04-17T11:59:21.768Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
-  percent: 63
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 01 P03 | 2 min | 2 tasks | 3 files |
 | Phase 01 P04 | 2 min | 2 tasks | 2 files |
 | Phase 02 P01 | 3 min | 2 tasks | 5 files |
+| Phase 02 P02 | 2 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 规则文本允许 deterministic 截断，但必须保留可识别结算语义的稳定片段。
 - [Phase 02]: 继续把 probability helper 留在 bot_v2.py 内，用纯函数输出完整 bucket probability records，而不是提前拆模块。
 - [Phase 02]: scan loop 先持久化 bucket_probabilities，再进入后续策略逻辑；skipped market 必须主动清空旧表。
+- [Phase 02]: YES/NO 两侧 quote 必须各自按 token_id 读取 CLOB book 和 tick size，不能再从 Gamma 或补数推断。
+- [Phase 02]: scan loop 继续保持 ready/skipped 语义层不变，但把 execution stop reasons 独立落进 quote_snapshot。
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T11:52:48.220Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-04-17T11:59:21.766Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
