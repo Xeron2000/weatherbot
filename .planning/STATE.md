@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-04-17T15:36:03.419Z"
+status: verifying
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-04-17T15:44:32.688Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 16
-  completed_plans: 15
-  percent: 94
+  completed_plans: 16
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 Phase: 04 (被动挂单与订单恢复) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-17
 
 Progress: [░░░░░░░░░░] 0%
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P01 | 4 min | 2 tasks | 3 files |
 | Phase 04 P02 | 4 min | 2 tasks | 2 files |
 | Phase 04 P03 | 6 min | 2 tasks | 2 files |
+| Phase 04 P04 | 3 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Recent decisions affecting current work:
 - [Phase 04]: terminal 订单统一写入 order_history，partial 保持 active_order，filled/canceled/expired 则清空 active_order。 — 保证单 market 同时只有一笔 active_order，并保留完整终态审计轨迹。
 - [Phase 04]: load_state() 同时恢复 risk_state 与 order_state，两者都以 market JSON 为事实源。
 - [Phase 04]: partial order restart 后优先继续撮合，不参与 quote_repriced 替换，避免同 market 重建第二笔 active_order。
+- [Phase 04]: Order lifecycle summary reads restored status counts plus persisted active_order/order_history facts.
+- [Phase 04]: Phase 4 README stays phase-scoped with one regression command and three order truth sources.
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T15:36:03.417Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-04-17T15:44:32.686Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None

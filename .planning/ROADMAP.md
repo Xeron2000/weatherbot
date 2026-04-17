@@ -85,7 +85,7 @@ Plans:
 - [x] 04-01-PLAN.md — 建立被动订单配置、限价意图与状态机 helper 合同
 - [x] 04-02-PLAN.md — 将 passive order lifecycle 接入 scan loop 并处理 refresh/cancel/fill
 - [x] 04-03-PLAN.md — 恢复未终结订单并在 restart 后继续 resume working/partial order
-- [ ] 04-04-PLAN.md — 在 status/report 中展示订单生命周期并补 README 验证说明
+- [x] 04-04-PLAN.md — 在 status/report 中展示订单生命周期并补 README 验证说明
 
 ### Phase 5: 保守 paper execution 与回放验证
 **Goal**: 操作者可以在不使用真实资金的前提下运行完整模拟执行，并检验被动挂单假设是否足够保守。
