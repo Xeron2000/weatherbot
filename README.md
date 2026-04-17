@@ -33,11 +33,13 @@ Polymarket runs markets like "Will the highest temperature in Chicago be between
 The bot:
 1. Fetches forecasts from ECMWF and HRRR via Open-Meteo (free, no key required)
 2. Gets real-time observations from METAR airport stations
-3. Finds the matching temperature bucket on Polymarket
-4. Calculates Expected Value — only enters if the math is positive
-5. Sizes the position using fractional Kelly Criterion
-6. Monitors stops every 10 minutes, full scan every hour
-7. Auto-resolves markets by querying Polymarket API directly
+3. Builds a semantic market snapshot with resolution metadata, contract identifiers, and scan guardrails
+4. Skips markets with explicit `skip_reasons` when station mapping, units, or weather freshness do not match
+5. Finds the matching temperature bucket on Polymarket
+6. Calculates Expected Value — only enters if the math is positive
+7. Sizes the position using fractional Kelly Criterion
+8. Monitors stops every 10 minutes, full scan every hour
+9. Auto-resolves markets by querying Polymarket API directly
 
 ---
 
@@ -104,10 +106,25 @@ python weatherbet.py report    # full breakdown of all resolved markets
 All data is saved to `data/markets/` — one JSON file per market. Each file contains:
 - Hourly forecast snapshots (ECMWF, HRRR, METAR)
 - Market price history
+- Resolution metadata (`station`, `unit`, `resolution_text`, `resolution_source`, `rounding_rule`)
+- Condition / token identifiers for each contract in `market_contracts`
+- Scan guardrails and explicit `skip_reasons` for rejected markets
 - Position details (entry, stop, PnL)
 - Final resolution outcome
 
-This data is used for self-calibration — the bot learns forecast accuracy per city over time and adjusts position sizing accordingly.
+This data is used for self-calibration and auditability — the bot learns forecast accuracy per city over time, while the persisted market snapshot shows why a market was accepted into the scan universe or skipped.
+
+---
+
+## Phase 1 Verification
+
+Run the Phase 1 semantic scan regression suite locally with:
+
+```bash
+uv run pytest tests/test_phase1_market_semantics.py tests/test_phase1_guardrails.py tests/test_phase1_scan_loop.py tests/test_phase1_reporting.py -q
+```
+
+This verifies the persisted snapshot schema, resolution metadata, contract identifiers, scan guardrails, and operator-facing accepted/skipped reporting output.
 
 ---
 
