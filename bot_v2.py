@@ -2960,25 +2960,35 @@ def collect_active_order_facts(markets):
     return active_orders
 
 
-def summarize_terminal_order_reasons(markets, limit=10):
+def collect_recent_terminal_orders(markets, limit=10):
     terminal_orders = []
     for market in markets or []:
         ensure_market_order_defaults(market)
         for order in market.get("order_history", []) or []:
             if not is_order_terminal(order):
                 continue
-            terminal_orders.append(
-                {
-                    "status": order.get("status"),
-                    "reason": order.get("status_reason") or "unknown",
-                    "updated_at": order.get("updated_at")
-                    or order.get("created_at")
-                    or "",
-                }
-            )
+            terminal_orders.append((market, order))
 
-    terminal_orders.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
-    terminal_orders = terminal_orders[:limit]
+    terminal_orders.sort(
+        key=lambda item: (
+            item[1].get("updated_at") or item[1].get("created_at") or "",
+            item[1].get("order_id") or "",
+        ),
+        reverse=True,
+    )
+    return terminal_orders[:limit]
+
+
+def summarize_terminal_order_reasons(markets, limit=10):
+    terminal_orders = []
+    for _, order in collect_recent_terminal_orders(markets, limit=limit):
+        terminal_orders.append(
+            {
+                "status": order.get("status"),
+                "reason": order.get("status_reason") or "unknown",
+                "updated_at": order.get("updated_at") or order.get("created_at") or "",
+            }
+        )
 
     summary = {"filled": {}, "canceled": {}, "expired": {}}
     for order in terminal_orders:
@@ -2995,6 +3005,7 @@ def print_order_summary(state, markets):
     status_counts = order_state.get("status_counts") or {}
     active_count = len(order_state.get("active_orders") or [])
     active_orders = collect_active_order_facts(markets)
+    terminal_orders = collect_recent_terminal_orders(markets)
     terminal_reason_summary = summarize_terminal_order_reasons(markets)
 
     print(f"\n  Order lifecycle")
@@ -3025,10 +3036,33 @@ def print_order_summary(state, markets):
             print(
                 f"    {market.get('city_name', market.get('city')):<16} {market.get('date')} | "
                 f"{order.get('strategy_leg')} {order.get('token_side')} | {bucket:<12} | "
+                f"status={order.get('status') or 'unknown'} | "
                 f"limit={limit_text} | time_in_force={order.get('time_in_force') or 'unknown'} | "
                 f"expires_at={order.get('expires_at') or 'none'} | "
                 f"filled={filled_shares:.4f} remaining={remaining_shares:.4f} | "
                 f"status_reason={order.get('status_reason') or 'unknown'}"
+            )
+
+    print("    Recent terminal orders")
+    if not terminal_orders:
+        print("      none")
+    else:
+        for market, order in terminal_orders:
+            limit_price = safe_float(order.get("limit_price"))
+            filled_shares = round(float(order.get("filled_shares", 0.0) or 0.0), 4)
+            remaining_shares = round(
+                float(order.get("remaining_shares", 0.0) or 0.0), 4
+            )
+            limit_text = f"{limit_price:.4f}" if limit_price is not None else "unknown"
+            updated_at = order.get("updated_at") or order.get("created_at") or "unknown"
+            print(
+                f"      {market.get('city_name', market.get('city')):<16} {market.get('date')} | "
+                f"order_id={order.get('order_id') or 'unknown'} | "
+                f"status={order.get('status') or 'unknown'} | "
+                f"reason={order.get('status_reason') or 'unknown'} | "
+                f"updated_at={updated_at} | "
+                f"limit={limit_text} | "
+                f"filled={filled_shares:.4f} remaining={remaining_shares:.4f}"
             )
 
     print("    Recent terminal reasons")
