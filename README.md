@@ -74,9 +74,6 @@ Create `config.json` in the project folder:
 ```json
 {
   "balance": 10000.0,
-  "max_bet": 20.0,
-  "min_ev": 0.05,
-  "max_price": 0.45,
   "min_volume": 2000,
   "min_hours": 2.0,
   "max_hours": 72.0,
@@ -84,7 +81,25 @@ Create `config.json` in the project folder:
   "max_slippage": 0.03,
   "scan_interval": 3600,
   "calibration_min": 30,
-  "vc_key": "YOUR_VISUAL_CROSSING_KEY"
+  "vc_key": "YOUR_VISUAL_CROSSING_KEY",
+  "yes_strategy": {
+    "max_price": 0.25,
+    "min_probability": 0.14,
+    "min_edge": 0.03,
+    "min_hours": 2.0,
+    "max_hours": 72.0,
+    "max_size": 20.0,
+    "min_size": 1.0
+  },
+  "no_strategy": {
+    "min_price": 0.65,
+    "min_probability": 0.70,
+    "min_edge": 0.04,
+    "min_hours": 2.0,
+    "max_hours": 72.0,
+    "max_size": 20.0,
+    "min_size": 1.0
+  }
 }
 ```
 
@@ -109,6 +124,9 @@ All data is saved to `data/markets/` — one JSON file per market. Each file con
 - Resolution metadata (`station`, `unit`, `resolution_text`, `resolution_source`, `rounding_rule`)
 - Condition / token identifiers for each contract in `market_contracts`
 - Scan guardrails and explicit `skip_reasons` for rejected markets
+- Phase 2 probability truth in `bucket_probabilities`
+- Phase 2 execution truth in `quote_snapshot`
+- Phase 2 candidate explanations in `candidate_assessments`
 - Position details (entry, stop, PnL)
 - Final resolution outcome
 
@@ -125,6 +143,24 @@ uv run pytest tests/test_phase1_market_semantics.py tests/test_phase1_guardrails
 ```
 
 This verifies the persisted snapshot schema, resolution metadata, contract identifiers, scan guardrails, and operator-facing accepted/skipped reporting output.
+
+---
+
+## Phase 2 Verification
+
+Run the Phase 2 candidate pipeline regression suite locally with:
+
+```bash
+uv run pytest tests/test_phase2_probability.py tests/test_phase2_quotes.py tests/test_phase2_strategies.py tests/test_phase2_reporting.py -q
+```
+
+Phase 2 adds three persisted fact sources to each admissible market JSON:
+
+- `bucket_probabilities` — all-bucket per-source and aggregate fair probability table
+- `quote_snapshot` — YES/NO token-level CLOB quote truth plus execution stop reasons
+- `candidate_assessments` — operator-facing YES/NO candidate outputs with `strategy_leg`, `status`, `reasons`, `fair_price`, and quote context
+
+`python weatherbet.py status` and `python weatherbet.py report` now show candidate explanation summaries directly from `candidate_assessments`, so you can inspect accepted, rejected, size-down, and reprice outcomes before any trades resolve.
 
 ---
 
