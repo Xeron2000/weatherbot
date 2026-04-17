@@ -182,13 +182,14 @@ def test_print_status_shows_order_lifecycle_summary(
     assert "expired" in out
     assert "active_orders=1" in out
     assert "YES_SNIPER" in out
+    assert "status=partial" in out
     assert "time_in_force" in out
     assert "limit=0.1100" in out
     assert "remaining=80.0000" in out
     assert "status_reason=quote_repriced" in out
 
 
-def test_print_report_shows_recent_terminal_order_reason_summary(
+def test_print_report_shows_recent_terminal_orders(
     phase1_gamma_event, monkeypatch, capsys
 ):
     ts = "2026-04-17T12:00:00+00:00"
@@ -200,11 +201,21 @@ def test_print_report_shows_recent_terminal_order_reason_summary(
     out = capsys.readouterr().out
 
     assert "Order lifecycle" in out
+    assert "Recent terminal orders" in out
     assert "Recent terminal reasons" in out
-    assert "quote_repriced" in out
-    assert "candidate_downgraded" in out
-    assert "expired" in out
-    assert "passive_fill_complete" in out
+    assert "terminal:filled:passive_fill_complete:0.1000" in out
+    assert "terminal:canceled:candidate_downgraded:0.1100" in out
+    assert "terminal:expired:expired:0.1200" in out
+    assert "status=filled" in out
+    assert "status=canceled" in out
+    assert "status=expired" in out
+    assert "reason=passive_fill_complete" in out
+    assert "reason=candidate_downgraded" in out
+    assert "reason=expired" in out
+    assert "updated_at=2026-04-17T12:00:00+00:00" in out
+    assert "limit=0.1000" in out
+    assert "limit=0.1100" in out
+    assert "limit=0.1200" in out
 
 
 def test_order_summary_stays_separate_from_trade_and_candidate_sections(
