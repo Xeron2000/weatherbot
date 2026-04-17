@@ -74,6 +74,10 @@ def test_print_status_shows_candidate_assessment_summary(
     assert "reasons=price_above_max" in out
     assert "fair=0.180" in out
     assert "quote=ask=0.34 bid=0.31" in out
+    assert "resolution_text=" in out
+    assert "condition_id=cond-nyc-52-53" in out
+    assert "token_id_yes=yes-nyc-52-53" in out
+    assert "token_id_no=no-nyc-52-53" in out
 
 
 def test_print_report_shows_candidate_assessments_without_resolved_trades(
@@ -99,6 +103,10 @@ def test_print_report_shows_candidate_assessments_without_resolved_trades(
     assert "YES_SNIPER" in out
     assert "NO_CARRY" in out
     assert "No resolved markets yet." in out
+    assert "resolution_text=" in out
+    assert "condition_id=cond-nyc-52-53" in out
+    assert "token_id_yes=yes-nyc-52-53" in out
+    assert "token_id_no=no-nyc-52-53" in out
 
 
 def test_reporting_keeps_trade_stats_separate_from_candidate_counts(
