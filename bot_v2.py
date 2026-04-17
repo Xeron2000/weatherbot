@@ -2942,6 +2942,110 @@ def print_route_decision_summary(markets):
     print(f"    reasons={summary}")
 
 
+def format_order_reason_counts(reason_counts):
+    if not reason_counts:
+        return "none"
+    return ", ".join(
+        f"{reason}={count}" for reason, count in sorted(reason_counts.items())
+    )
+
+
+def collect_active_order_facts(markets):
+    active_orders = []
+    for market in sorted(markets, key=lambda x: (x.get("date", ""), x.get("city", ""))):
+        ensure_market_order_defaults(market)
+        active_order = market.get("active_order")
+        if active_order and is_order_unfinished(active_order):
+            active_orders.append((market, active_order))
+    return active_orders
+
+
+def summarize_terminal_order_reasons(markets, limit=10):
+    terminal_orders = []
+    for market in markets or []:
+        ensure_market_order_defaults(market)
+        for order in market.get("order_history", []) or []:
+            if not is_order_terminal(order):
+                continue
+            terminal_orders.append(
+                {
+                    "status": order.get("status"),
+                    "reason": order.get("status_reason") or "unknown",
+                    "updated_at": order.get("updated_at")
+                    or order.get("created_at")
+                    or "",
+                }
+            )
+
+    terminal_orders.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+    terminal_orders = terminal_orders[:limit]
+
+    summary = {"filled": {}, "canceled": {}, "expired": {}}
+    for order in terminal_orders:
+        status = order.get("status")
+        if status not in summary:
+            continue
+        reason = order.get("reason") or "unknown"
+        summary[status][reason] = summary[status].get(reason, 0) + 1
+    return summary
+
+
+def print_order_summary(state, markets):
+    order_state = state.get("order_state") or {}
+    status_counts = order_state.get("status_counts") or {}
+    active_count = len(order_state.get("active_orders") or [])
+    active_orders = collect_active_order_facts(markets)
+    terminal_reason_summary = summarize_terminal_order_reasons(markets)
+
+    print(f"\n  Order lifecycle")
+    print(
+        "    "
+        f"active_orders={active_count} "
+        f"planned={int(status_counts.get('planned', 0) or 0)} "
+        f"working={int(status_counts.get('working', 0) or 0)} "
+        f"partial={int(status_counts.get('partial', 0) or 0)} "
+        f"filled={int(status_counts.get('filled', 0) or 0)} "
+        f"canceled={int(status_counts.get('canceled', 0) or 0)} "
+        f"expired={int(status_counts.get('expired', 0) or 0)}"
+    )
+
+    if not active_orders:
+        print("    active_order_details=none")
+    else:
+        for market, order in active_orders:
+            bucket = format_bucket_label(
+                {"range": order.get("range"), "unit": market.get("unit") or ""}
+            )
+            limit_price = safe_float(order.get("limit_price"))
+            filled_shares = round(float(order.get("filled_shares", 0.0) or 0.0), 4)
+            remaining_shares = round(
+                float(order.get("remaining_shares", 0.0) or 0.0), 4
+            )
+            limit_text = f"{limit_price:.4f}" if limit_price is not None else "unknown"
+            print(
+                f"    {market.get('city_name', market.get('city')):<16} {market.get('date')} | "
+                f"{order.get('strategy_leg')} {order.get('token_side')} | {bucket:<12} | "
+                f"limit={limit_text} | time_in_force={order.get('time_in_force') or 'unknown'} | "
+                f"expires_at={order.get('expires_at') or 'none'} | "
+                f"filled={filled_shares:.4f} remaining={remaining_shares:.4f} | "
+                f"status_reason={order.get('status_reason') or 'unknown'}"
+            )
+
+    print("    Recent terminal reasons")
+    print(
+        "      "
+        f"fill_reasons={format_order_reason_counts(terminal_reason_summary['filled'])}"
+    )
+    print(
+        "      "
+        f"cancel_reasons={format_order_reason_counts(terminal_reason_summary['canceled'])}"
+    )
+    print(
+        "      "
+        f"expire_reasons={format_order_reason_counts(terminal_reason_summary['expired'])}"
+    )
+
+
 def print_status():
     state = load_state()
     markets = load_all_markets()
@@ -2978,6 +3082,7 @@ def print_status():
     print_risk_summary(state)
     print_scan_summary(markets)
     print_route_decision_summary(markets)
+    print_order_summary(state, markets)
 
     if open_pos:
         print(f"\n  Open positions:")
@@ -3028,6 +3133,7 @@ def print_report():
     print_exposure_summary(state)
     print_scan_summary(markets)
     print_route_decision_summary(markets)
+    print_order_summary(state, markets)
 
     if not resolved:
         print("  No resolved markets yet.")

@@ -13,7 +13,7 @@ The foundation. Scans 6 US cities, fetches forecasts from NWS using airport stat
 
 No math, no complexity. Just the core logic — good for understanding how the system works.
 
-### `weatherbet.py` — Full Bot (current)
+### `bot_v2.py` — Full Bot (current)
 Everything in v1, plus:
 - **20 cities** across 4 continents (US, Europe, Asia, South America, Oceania)
 - **3 forecast sources** — ECMWF (global), HRRR/GFS (US, hourly), METAR (real-time observations)
@@ -109,9 +109,9 @@ Get a free Visual Crossing API key at visualcrossing.com — used to fetch actua
 
 ## Usage
 ```bash
-python weatherbet.py           # start the bot — scans every hour
-python weatherbet.py status    # balance and open positions
-python weatherbet.py report    # full breakdown of all resolved markets
+python bot_v2.py           # start the bot — scans every hour
+python bot_v2.py status    # balance and open positions
+python bot_v2.py report    # full breakdown of all resolved markets
 ```
 
 ---
@@ -163,7 +163,7 @@ Phase 2 adds three persisted fact sources to each admissible market JSON:
 - `quote_snapshot` — YES/NO token-level CLOB quote truth plus execution stop reasons
 - `candidate_assessments` — operator-facing YES/NO candidate outputs with `strategy_leg`, `status`, `reasons`, `fair_price`, and quote context
 
-`python weatherbet.py status` and `python weatherbet.py report` now show candidate explanation summaries directly from `candidate_assessments`, so you can inspect accepted, rejected, size-down, and reprice outcomes before any trades resolve.
+`python bot_v2.py status` and `python bot_v2.py report` now show candidate explanation summaries directly from `candidate_assessments`, so you can inspect accepted, rejected, size-down, and reprice outcomes before any trades resolve.
 
 ---
 
@@ -181,7 +181,25 @@ Phase 3 adds three persisted risk facts:
 - `route_decisions` — per-market routing audit trail showing accepted/rejected decisions, budget buckets, reserved worst-loss, and reason codes
 - `reserved_exposure` — the currently reserved exposure for a market, plus `release_reason` when a reservation is downgraded, missing, or invalidated
 
-`python weatherbet.py status` and `python weatherbet.py report` now surface YES/NO budget usage, global worst-loss usage, exposure rollups, and common reject/release reasons directly from those persisted facts.
+`python bot_v2.py status` and `python bot_v2.py report` now surface YES/NO budget usage, global worst-loss usage, exposure rollups, and common reject/release reasons directly from those persisted facts.
+
+---
+
+## Phase 4 Verification
+
+Run the full Phase 4 passive order lifecycle regression suite locally with:
+
+```bash
+uv run pytest tests/test_phase4_orders.py tests/test_phase4_scan_loop.py tests/test_phase4_restore.py tests/test_phase4_reporting.py -q
+```
+
+Phase 4 adds three persisted order fact sources:
+
+- `active_order` — the current unfinished passive order for a market, including `limit_price`, `time_in_force`, `expires_at`, `filled_shares`, `remaining_shares`, and `status_reason`
+- `order_history` — append-only terminal order archive containing `filled`, `canceled`, and `expired` outcomes plus their `status_reason` trail
+- `order_state` — restored ledger in `data/state.json` / `load_state()` that summarizes `status_counts`, `active_orders`, and `last_restored_at` for CLI reporting
+
+`python bot_v2.py status` and `python bot_v2.py report` now read those persisted order facts directly so the operator can inspect planned / working / partial / filled / canceled / expired lifecycle state without opening the raw market JSON files.
 
 ---
 

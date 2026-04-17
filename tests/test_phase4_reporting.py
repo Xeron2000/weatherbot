@@ -115,6 +115,7 @@ def make_market(event, ts):
     market["order_history"] = [
         make_terminal_order(ts, "filled", "passive_fill_complete", limit_price=0.10),
         make_terminal_order(ts, "canceled", "candidate_downgraded", limit_price=0.11),
+        make_terminal_order(ts, "canceled", "quote_repriced", limit_price=0.10),
         make_terminal_order(ts, "expired", "expired", limit_price=0.12),
     ]
     return market
@@ -218,7 +219,7 @@ def test_order_summary_stays_separate_from_trade_and_candidate_sections(
     out = capsys.readouterr().out
 
     order_idx = out.index("Order lifecycle")
-    route_idx = out.index("Route reasons")
+    route_idx = out.index("Route decisions")
     assert route_idx < order_idx
-    assert "Trades:      0" in out
+    assert "No trades yet" in out
     assert "accepted=1" not in out[order_idx:]
