@@ -46,7 +46,13 @@ Plans:
   2. 操作者可以分别配置低价 YES 与高价 NO 的价格、概率、时间窗和仓位阈值，并看到两类候选独立筛选结果。
   3. 机器人会结合 bid/ask、tick size、市场状态等可执行盘口信息判断某个候选是否值得挂单。
   4. 当缺少关键市场元数据、规则映射或实时行情时，机器人会自动停单并说明候选被拒绝、缩量或降价的原因。
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 02-01-PLAN.md — 建立 band probability 真相源并把 bucket probability 表持久化到 market JSON
+- [ ] 02-02-PLAN.md — 用 CLOB token-level quote snapshot 替换 Gamma 执行近似并补 execution stop reasons
+- [ ] 02-03-PLAN.md — 增加 YES/NO 分腿配置与 candidate_assessments 持久化
+- [ ] 02-04-PLAN.md — 在 status/report 中展示候选解释并补 README 验证说明
 
 ### Phase 3: 资金路由与暴露控制
 **Goal**: 操作者可以让机器人在低价 YES 与高价 NO 之间独立分配资金，并把集中暴露限制在可接受范围内。
