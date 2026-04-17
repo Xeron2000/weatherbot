@@ -1296,6 +1296,44 @@ def scan_and_update():
 # =============================================================================
 
 
+def format_bucket_label(contract):
+    rng = contract.get("range") or (None, None)
+    unit = contract.get("unit") or ""
+    low, high = rng
+    if low is None or high is None:
+        return "unknown"
+    return f"{low}-{high}{unit}"
+
+
+def print_scan_summary(markets):
+    accepted = [m for m in markets if m.get("last_scan_status") == "ready"]
+    skipped = [m for m in markets if m.get("last_scan_status") == "skipped"]
+
+    if not accepted and not skipped:
+        return
+
+    print(f"\n  Accepted scan markets: {len(accepted)}")
+    if accepted:
+        for m in sorted(accepted, key=lambda x: (x["date"], x["city"])):
+            metadata = m.get("resolution_metadata", {})
+            station = metadata.get("station") or m.get("station") or "?"
+            unit = metadata.get("unit") or m.get("unit") or ""
+            contract = (m.get("market_contracts") or [{}])[0]
+            bucket = format_bucket_label(contract)
+            market_id = contract.get("market_id") or "unknown"
+            print(
+                f"    {m['city_name']:<16} {m['date']} | {station} | {bucket:<12} | {market_id} | {unit}"
+            )
+
+    print(f"\n  Skipped scan markets: {len(skipped)}")
+    if skipped:
+        for m in sorted(skipped, key=lambda x: (x["date"], x["city"])):
+            reasons = ", ".join(m.get("scan_guardrails", {}).get("skip_reasons", []))
+            if not reasons:
+                reasons = m.get("last_scan_reason") or "unknown"
+            print(f"    {m['city_name']:<16} {m['date']} | {reasons}")
+
+
 def print_status():
     state = load_state()
     markets = load_all_markets()
@@ -1328,6 +1366,8 @@ def print_status():
     )
     print(f"  Open:        {len(open_pos)}")
     print(f"  Resolved:    {len(resolved)}")
+
+    print_scan_summary(markets)
 
     if open_pos:
         print(f"\n  Open positions:")
@@ -1372,6 +1412,8 @@ def print_report():
     print(f"\n{'=' * 55}")
     print(f"  WEATHERBET — FULL REPORT")
     print(f"{'=' * 55}")
+
+    print_scan_summary(markets)
 
     if not resolved:
         print("  No resolved markets yet.")
