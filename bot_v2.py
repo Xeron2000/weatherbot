@@ -1305,6 +1305,13 @@ def format_bucket_label(contract):
     return f"{low}-{high}{unit}"
 
 
+def format_resolution_text(text, limit=120):
+    summary = " ".join((text or "").split())
+    if len(summary) <= limit:
+        return summary
+    return summary[: limit - 3].rstrip() + "..."
+
+
 def print_scan_summary(markets):
     accepted = [m for m in markets if m.get("last_scan_status") == "ready"]
     skipped = [m for m in markets if m.get("last_scan_status") == "skipped"]
@@ -1318,11 +1325,15 @@ def print_scan_summary(markets):
             metadata = m.get("resolution_metadata", {})
             station = metadata.get("station") or m.get("station") or "?"
             unit = metadata.get("unit") or m.get("unit") or ""
+            resolution_text = format_resolution_text(metadata.get("resolution_text"))
             contract = (m.get("market_contracts") or [{}])[0]
             bucket = format_bucket_label(contract)
             market_id = contract.get("market_id") or "unknown"
+            condition_id = contract.get("condition_id") or "unknown"
+            token_id_yes = contract.get("token_id_yes") or "unknown"
+            token_id_no = contract.get("token_id_no") or "unknown"
             print(
-                f"    {m['city_name']:<16} {m['date']} | {station} | {bucket:<12} | {market_id} | {unit}"
+                f"    {m['city_name']:<16} {m['date']} | {station} | {bucket:<12} | {market_id} | {unit} | {resolution_text} | condition_id={condition_id} | yes={token_id_yes} | no={token_id_no}"
             )
 
     print(f"\n  Skipped scan markets: {len(skipped)}")
