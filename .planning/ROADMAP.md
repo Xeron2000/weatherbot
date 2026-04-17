@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. 操作者可以让机器人持续扫描配置好的城市与日期范围，并稳定产出候选市场快照。
   2. 每个被纳入扫描结果的市场都能显示正确的机场站点、温区、结算规则和 condition/token 标识。
   3. 当规则映射缺失、单位不一致或天气数据过期时，机器人会明确跳过该市场而不是继续交易。
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 - [x] 01-01-PLAN.md — 建立 Phase 1 测试底座与市场语义 helper 合同
@@ -86,6 +86,7 @@ Plans:
 - [x] 04-02-PLAN.md — 将 passive order lifecycle 接入 scan loop 并处理 refresh/cancel/fill
 - [x] 04-03-PLAN.md — 恢复未终结订单并在 restart 后继续 resume working/partial order
 - [x] 04-04-PLAN.md — 在 status/report 中展示订单生命周期并补 README 验证说明
+- [x] 04-05-PLAN.md — 补齐逐笔 unfinished/terminal order lifecycle 可见性缺口
 
 ### Phase 5: 保守 paper execution 与回放验证
 **Goal**: 操作者可以在不使用真实资金的前提下运行完整模拟执行，并检验被动挂单假设是否足够保守。

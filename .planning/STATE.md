@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-04-17T15:44:32.688Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-04-17T16:06:50.547Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 17
+  completed_plans: 17
   percent: 100
 ---
 
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P02 | 4 min | 2 tasks | 2 files |
 | Phase 04 P03 | 6 min | 2 tasks | 2 files |
 | Phase 04 P04 | 3 min | 2 tasks | 3 files |
+| Phase 04 P05 | 2 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,8 @@ Recent decisions affecting current work:
 - [Phase 04]: partial order restart 后优先继续撮合，不参与 quote_repriced 替换，避免同 market 重建第二笔 active_order。
 - [Phase 04]: Order lifecycle summary reads restored status counts plus persisted active_order/order_history facts.
 - [Phase 04]: Phase 4 README stays phase-scoped with one regression command and three order truth sources.
+- [Phase 04]: Recent terminal orders now render directly from markets[*].order_history before grouped reason rollups, keeping report output tied to persisted facts.
+- [Phase 04]: Active order detail lines now print explicit status alongside status_reason, limit, tif, expiry, and fill progress to satisfy OBS-02 without changing execution semantics.
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T15:44:32.686Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-04-17T16:06:50.545Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
