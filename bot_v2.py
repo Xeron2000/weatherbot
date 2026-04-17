@@ -858,6 +858,7 @@ def new_market(city_slug, date_str, event, hours):
         "forecast_snapshots": [],  # list of forecast snapshots
         "market_snapshots": [],  # list of market price snapshots
         "all_outcomes": [],  # all market buckets
+        "bucket_probabilities": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -992,6 +993,7 @@ def scan_and_update():
                 mkt.setdefault("last_scan_status", "pending")
                 mkt.setdefault("last_scan_at", None)
                 mkt.setdefault("last_scan_reason", None)
+                mkt.setdefault("bucket_probabilities", [])
 
             mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
             mkt["event_id"] = event.get("id", mkt.get("event_id", ""))
@@ -1027,6 +1029,7 @@ def scan_and_update():
             if not verdict["admissible"]:
                 mkt["last_scan_status"] = "skipped"
                 mkt["all_outcomes"] = []
+                mkt["bucket_probabilities"] = []
                 save_market(mkt)
                 print(
                     f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
@@ -1070,6 +1073,15 @@ def scan_and_update():
 
             outcomes.sort(key=lambda x: x["range"][0])
             mkt["all_outcomes"] = outcomes
+            mkt["bucket_probabilities"] = aggregate_probability(
+                mkt["market_contracts"],
+                {
+                    "ecmwf": snap.get("ecmwf"),
+                    "hrrr": snap.get("hrrr"),
+                    "metar_anchor": snap.get("metar"),
+                },
+                city_slug=city_slug,
+            )
 
             # Forecast snapshot
             forecast_snap = {
