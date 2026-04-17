@@ -1,0 +1,69 @@
+{
+  "id": "phase2-event-nyc-2026-06-15",
+  "slug": "new-york-city-high-temperature-on-june-15",
+  "market_slug": "new-york-city-high-temperature-on-june-15",
+  "title": "What will be the high temperature in New York City on June 15?",
+  "endDate": "2026-06-15T23:59:00Z",
+  "markets": [
+    {
+      "id": "mkt-59-or-below",
+      "question": "59F or below",
+      "rules": "Resolves to the daily high temperature in NYC on June 15, 2026.",
+      "bestBid": 0.18,
+      "bestAsk": 0.2,
+      "volume": 1500,
+      "outcomes": "[\"Yes\",\"No\"]",
+      "outcomePrices": "[\"0.20\",\"0.80\"]",
+      "clobTokenIds": "[\"yes-59\",\"no-59\"]",
+      "conditionId": "cond-59"
+    },
+    {
+      "id": "mkt-60-64",
+      "question": "Between 60-64F",
+      "rules": "Resolves to the daily high temperature in NYC on June 15, 2026.",
+      "bestBid": 0.24,
+      "bestAsk": 0.27,
+      "volume": 1700,
+      "outcomes": "[\"Yes\",\"No\"]",
+      "outcomePrices": "[\"0.27\",\"0.73\"]",
+      "clobTokenIds": "[\"yes-60-64\",\"no-60-64\"]",
+      "conditionId": "cond-60-64"
+    },
+    {
+      "id": "mkt-65-69",
+      "question": "Between 65-69F",
+      "rules": "Resolves to the daily high temperature in NYC on June 15, 2026.",
+      "bestBid": 0.29,
+      "bestAsk": 0.33,
+      "volume": 2100,
+      "outcomes": "[\"Yes\",\"No\"]",
+      "outcomePrices": "[\"0.33\",\"0.67\"]",
+      "clobTokenIds": "[\"yes-65-69\",\"no-65-69\"]",
+      "conditionId": "cond-65-69"
+    },
+    {
+      "id": "mkt-70-74",
+      "question": "Between 70-74F",
+      "rules": "Resolves to the daily high temperature in NYC on June 15, 2026.",
+      "bestBid": 0.11,
+      "bestAsk": 0.14,
+      "volume": 1200,
+      "outcomes": "[\"Yes\",\"No\"]",
+      "outcomePrices": "[\"0.14\",\"0.86\"]",
+      "clobTokenIds": "[\"yes-70-74\",\"no-70-74\"]",
+      "conditionId": "cond-70-74"
+    },
+    {
+      "id": "mkt-75-or-above",
+      "question": "75F or higher",
+      "rules": "Resolves to the daily high temperature in NYC on June 15, 2026.",
+      "bestBid": 0.05,
+      "bestAsk": 0.07,
+      "volume": 900,
+      "outcomes": "[\"Yes\",\"No\"]",
+      "outcomePrices": "[\"0.07\",\"0.93\"]",
+      "clobTokenIds": "[\"yes-75\",\"no-75\"]",
+      "conditionId": "cond-75"
+    }
+  ]
+}

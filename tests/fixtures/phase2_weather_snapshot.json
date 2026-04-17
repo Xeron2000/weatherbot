@@ -1,0 +1,15 @@
+{
+  "city_slug": "new-york-city",
+  "date_str": "2026-06-15",
+  "actual_temp": 64,
+  "sources": {
+    "ecmwf": 66,
+    "hrrr": 68,
+    "metar_anchor": 65
+  },
+  "sigmas": {
+    "ecmwf": 3.0,
+    "hrrr": 2.5,
+    "metar_anchor": 2.0
+  }
+}
