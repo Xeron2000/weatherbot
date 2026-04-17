@@ -1319,6 +1319,141 @@ def route_candidate_assessment(assessment, market, risk_state, router_cfg):
     return decision
 
 
+def build_leg_risk_state(bankroll, router_cfg):
+    return {
+        "YES_SNIPER": {
+            "budget": round(bankroll * router_cfg.get("yes_budget_pct", 0.0), 2),
+            "reserved": 0.0,
+            "hard_cap": round(bankroll * router_cfg.get("yes_leg_cap_pct", 0.0), 2),
+        },
+        "NO_CARRY": {
+            "budget": round(bankroll * router_cfg.get("no_budget_pct", 0.0), 2),
+            "reserved": 0.0,
+            "hard_cap": round(bankroll * router_cfg.get("no_leg_cap_pct", 0.0), 2),
+        },
+    }
+
+
+def build_empty_risk_state(bankroll, router_cfg):
+    return {
+        "bankroll": round(bankroll, 2),
+        "global_reserved_worst_loss": 0.0,
+        "legs": build_leg_risk_state(bankroll, router_cfg),
+        "market_exposure": {},
+        "city_exposure": {},
+        "date_exposure": {},
+        "event_exposure": {},
+        "active_reservations": [],
+    }
+
+
+def apply_reservation_to_risk_state(risk_state, reservation):
+    if not reservation:
+        return
+    reserved = float(reservation.get("reserved_worst_loss", 0.0) or 0.0)
+    if reserved <= 0:
+        return
+    strategy_leg = reservation.get("strategy_leg")
+    keys = reservation.get("exposure_keys", {}) or {}
+    if strategy_leg in risk_state.get("legs", {}):
+        risk_state["legs"][strategy_leg]["reserved"] = round(
+            float(risk_state["legs"][strategy_leg].get("reserved", 0.0) or 0.0)
+            + reserved,
+            2,
+        )
+    risk_state["global_reserved_worst_loss"] = round(
+        float(risk_state.get("global_reserved_worst_loss", 0.0) or 0.0) + reserved,
+        2,
+    )
+    for bucket_name in ["market", "city", "date", "event"]:
+        bucket_key = keys.get(bucket_name)
+        if bucket_key is None:
+            continue
+        ledger_name = f"{bucket_name}_exposure"
+        risk_state.setdefault(ledger_name, {})
+        risk_state[ledger_name][bucket_key] = round(
+            float(risk_state[ledger_name].get(bucket_key, 0.0) or 0.0) + reserved,
+            2,
+        )
+    active_reservation = {
+        "market": keys.get("market"),
+        "city": keys.get("city"),
+        "date": keys.get("date"),
+        "event": keys.get("event"),
+        "bucket": keys.get("bucket"),
+        "token_side": reservation.get("token_side"),
+        "strategy_leg": strategy_leg,
+        "reserved_worst_loss": reserved,
+    }
+    risk_state.setdefault("active_reservations", []).append(active_reservation)
+
+
+def restore_risk_state_from_markets(state, markets, router_cfg):
+    bankroll = float(state.get("starting_balance", BALANCE) or BALANCE)
+    risk_state = build_empty_risk_state(bankroll, router_cfg)
+    for market in markets or []:
+        reservation = market.get("reserved_exposure")
+        if not reservation:
+            continue
+        if reservation.get("release_reason"):
+            continue
+        restored = dict(reservation)
+        restored.setdefault(
+            "exposure_keys",
+            build_exposure_keys(
+                market,
+                assessment={
+                    "range": reservation.get("range"),
+                    "strategy_leg": reservation.get("strategy_leg"),
+                },
+            ),
+        )
+        apply_reservation_to_risk_state(risk_state, restored)
+    return risk_state
+
+
+def build_reserved_exposure(market, decision, reserved_at):
+    return {
+        "strategy_leg": decision.get("strategy_leg"),
+        "token_side": decision.get("token_side"),
+        "status": decision.get("status"),
+        "range": list(decision.get("range") or []),
+        "reserved_worst_loss": round(
+            decision.get("reserved_worst_loss", 0.0) or 0.0, 2
+        ),
+        "reserved_at": reserved_at,
+        "release_reason": None,
+        "reasons": list(decision.get("reasons", []) or []),
+        "budget_bucket": decision.get("budget_bucket"),
+        "exposure_keys": dict(decision.get("exposure_keys", {}) or {}),
+    }
+
+
+def route_market_candidates(market, risk_state, router_cfg, reserved_at=None):
+    assessments = market.get("candidate_assessments", []) or []
+    decisions = []
+    reserved_exposure = None
+
+    for leg in ["YES_SNIPER", "NO_CARRY"]:
+        leg_assessments = [a for a in assessments if a.get("strategy_leg") == leg]
+        for assessment in sort_leg_candidates(leg_assessments):
+            decision = route_candidate_assessment(
+                assessment, market, risk_state, router_cfg
+            )
+            decisions.append(decision)
+            if decision.get("status") == "accepted" and reserved_exposure is None:
+                reserved_exposure = build_reserved_exposure(
+                    market,
+                    decision,
+                    reserved_at or datetime.now(timezone.utc).isoformat(),
+                )
+                apply_reservation_to_risk_state(risk_state, reserved_exposure)
+
+    market["route_decisions"] = decisions
+    market["reserved_exposure"] = reserved_exposure
+    return decisions, reserved_exposure
+
+
 # =============================================================================
 # MARKET DATA STORAGE
 # Each market is stored in a separate file: data/markets/{city}_{date}.json
@@ -1392,6 +1527,8 @@ def new_market(city_slug, date_str, event, hours):
         "bucket_probabilities": [],
         "quote_snapshot": [],
         "candidate_assessments": [],
+        "route_decisions": [],
+        "reserved_exposure": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1403,15 +1540,26 @@ def new_market(city_slug, date_str, event, hours):
 
 def load_state():
     if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    return {
-        "balance": BALANCE,
-        "starting_balance": BALANCE,
-        "total_trades": 0,
-        "wins": 0,
-        "losses": 0,
-        "peak_balance": BALANCE,
-    }
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    else:
+        state = {
+            "balance": BALANCE,
+            "starting_balance": BALANCE,
+            "total_trades": 0,
+            "wins": 0,
+            "losses": 0,
+            "peak_balance": BALANCE,
+        }
+    state.setdefault("balance", BALANCE)
+    state.setdefault("starting_balance", BALANCE)
+    state.setdefault("total_trades", 0)
+    state.setdefault("wins", 0)
+    state.setdefault("losses", 0)
+    state.setdefault("peak_balance", BALANCE)
+    state["risk_state"] = restore_risk_state_from_markets(
+        state, load_all_markets(), RISK_ROUTER
+    )
+    return state
 
 
 def save_state(state):
@@ -1464,6 +1612,9 @@ def scan_and_update():
     now = datetime.now(timezone.utc)
     state = load_state()
     balance = state["balance"]
+    risk_state = state.get("risk_state") or build_empty_risk_state(
+        state.get("starting_balance", BALANCE), RISK_ROUTER
+    )
     new_pos = 0
     closed = 0
     resolved = 0
@@ -1529,6 +1680,8 @@ def scan_and_update():
                 mkt.setdefault("bucket_probabilities", [])
                 mkt.setdefault("quote_snapshot", [])
                 mkt.setdefault("candidate_assessments", [])
+                mkt.setdefault("route_decisions", [])
+                mkt.setdefault("reserved_exposure", None)
 
             mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
             mkt["event_id"] = event.get("id", mkt.get("event_id", ""))
@@ -1567,6 +1720,8 @@ def scan_and_update():
                 mkt["bucket_probabilities"] = []
                 mkt["quote_snapshot"] = []
                 mkt["candidate_assessments"] = []
+                mkt["route_decisions"] = []
+                mkt["reserved_exposure"] = None
                 save_market(mkt)
                 print(
                     f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
@@ -1624,6 +1779,9 @@ def scan_and_update():
                 mkt["bucket_probabilities"],
                 mkt["quote_snapshot"],
                 hours,
+            )
+            route_market_candidates(
+                mkt, risk_state, RISK_ROUTER, reserved_at=snap.get("ts")
             )
 
             # Forecast snapshot
@@ -1746,6 +1904,21 @@ def scan_and_update():
                     if in_bucket(forecast_temp, t_low, t_high):
                         matched_bucket = o
                         break
+
+                if matched_bucket:
+                    approved_yes_route = next(
+                        (
+                            route
+                            for route in mkt.get("route_decisions", [])
+                            if route.get("status") == "accepted"
+                            and route.get("strategy_leg") == "YES_SNIPER"
+                            and tuple(route.get("range") or ())
+                            == tuple(matched_bucket.get("range") or ())
+                        ),
+                        None,
+                    )
+                    if not approved_yes_route:
+                        matched_bucket = None
 
                 if matched_bucket:
                     o = matched_bucket
@@ -1878,6 +2051,7 @@ def scan_and_update():
 
     state["balance"] = round(balance, 2)
     state["peak_balance"] = max(state.get("peak_balance", balance), balance)
+    state["risk_state"] = risk_state
     save_state(state)
 
     # Run calibration if enough data collected

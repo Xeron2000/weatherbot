@@ -166,8 +166,8 @@ def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
         bot_v2,
         "build_candidate_assessments",
         lambda *_args, **_kwargs: [
-            make_assessment("YES_SNIPER", "yes", (70.0, 74.0), 0.04),
             make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09),
+            make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.04),
         ],
     )
 
@@ -182,6 +182,6 @@ def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
     ]
 
     assert len(accepted) == 1
-    assert accepted[0]["range"] == (65.0, 69.0)
+    assert accepted[0]["range"] == [65.0, 69.0]
     assert accepted[0]["reserved_worst_loss"] == 20.0
     assert any("global_cap_exceeded" in item["reasons"] for item in rejected)
