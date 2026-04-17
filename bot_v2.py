@@ -788,6 +788,118 @@ def evaluate_market_guardrails(
     }
 
 
+def safe_float(value):
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def get_clob_book(token_id):
+    try:
+        data = requests.get(
+            f"https://clob.polymarket.com/book?token_id={token_id}", timeout=(3, 5)
+        ).json()
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def get_clob_tick_size(token_id):
+    try:
+        data = requests.get(
+            f"https://clob.polymarket.com/tick-size?token_id={token_id}",
+            timeout=(3, 5),
+        ).json()
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def get_token_quote_snapshot(token_id, side):
+    reason_codes = []
+    book = get_clob_book(token_id)
+    tick_data = get_clob_tick_size(token_id)
+
+    if not book:
+        reason_codes.append("missing_quote_book")
+        return {
+            "token_id": token_id,
+            "side": side,
+            "bid": None,
+            "ask": None,
+            "spread": None,
+            "tick_size": None,
+            "min_order_size": None,
+            "book_ok": False,
+            "reason_codes": reason_codes,
+        }
+
+    if book.get("closed") is True:
+        reason_codes.append("market_closed")
+
+    bids = book.get("bids")
+    asks = book.get("asks")
+    if not isinstance(bids, list) or not isinstance(asks, list):
+        reason_codes.append("missing_quote_book")
+    elif not bids or not asks:
+        reason_codes.append("orderbook_empty")
+
+    bid = safe_float(bids[0].get("price")) if isinstance(bids, list) and bids else None
+    ask = safe_float(asks[0].get("price")) if isinstance(asks, list) and asks else None
+    spread = round(ask - bid, 4) if bid is not None and ask is not None else None
+
+    tick_size = None
+    if isinstance(tick_data, dict):
+        tick_size = safe_float(
+            tick_data.get("minimum_tick_size")
+            or tick_data.get("tick_size")
+            or tick_data.get("tickSize")
+        )
+    if tick_size is None:
+        tick_size = safe_float(book.get("tick_size"))
+    if tick_size is None:
+        reason_codes.append("tick_size_missing")
+
+    min_order_size = safe_float(book.get("min_order_size"))
+
+    return {
+        "token_id": token_id,
+        "side": side,
+        "bid": bid,
+        "ask": ask,
+        "spread": spread,
+        "tick_size": tick_size,
+        "min_order_size": min_order_size,
+        "book_ok": len(reason_codes) == 0,
+        "reason_codes": normalize_skip_reasons(reason_codes),
+    }
+
+
+def build_quote_snapshot(contracts):
+    snapshots = []
+    for contract in contracts:
+        yes_quote = get_token_quote_snapshot(contract.get("token_id_yes"), "yes")
+        no_quote = get_token_quote_snapshot(contract.get("token_id_no"), "no")
+        reasons = normalize_skip_reasons(
+            yes_quote.get("reason_codes", []) + no_quote.get("reason_codes", [])
+        )
+        snapshots.append(
+            {
+                "market_id": contract.get("market_id"),
+                "question": contract.get("question"),
+                "range": contract.get("range"),
+                "yes": yes_quote,
+                "no": no_quote,
+                "execution_ok": len(reasons) == 0,
+                "execution_stop_reasons": reasons,
+            }
+        )
+    return snapshots
+
+
 # =============================================================================
 # MARKET DATA STORAGE
 # Each market is stored in a separate file: data/markets/{city}_{date}.json
@@ -859,6 +971,7 @@ def new_market(city_slug, date_str, event, hours):
         "market_snapshots": [],  # list of market price snapshots
         "all_outcomes": [],  # all market buckets
         "bucket_probabilities": [],
+        "quote_snapshot": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -994,6 +1107,7 @@ def scan_and_update():
                 mkt.setdefault("last_scan_at", None)
                 mkt.setdefault("last_scan_reason", None)
                 mkt.setdefault("bucket_probabilities", [])
+                mkt.setdefault("quote_snapshot", [])
 
             mkt["event_slug"] = event.get("slug", mkt.get("event_slug", ""))
             mkt["event_id"] = event.get("id", mkt.get("event_id", ""))
@@ -1030,6 +1144,7 @@ def scan_and_update():
                 mkt["last_scan_status"] = "skipped"
                 mkt["all_outcomes"] = []
                 mkt["bucket_probabilities"] = []
+                mkt["quote_snapshot"] = []
                 save_market(mkt)
                 print(
                     f"  [SKIP] {loc['name']} {date} — {mkt['last_scan_reason'] or 'guardrail_rejected'}"
@@ -1082,6 +1197,7 @@ def scan_and_update():
                 },
                 city_slug=city_slug,
             )
+            mkt["quote_snapshot"] = build_quote_snapshot(mkt["market_contracts"])
 
             # Forecast snapshot
             forecast_snap = {
@@ -1208,12 +1324,28 @@ def scan_and_update():
                     o = matched_bucket
                     t_low, t_high = o["range"]
                     volume = o["volume"]
-                    bid = o.get("bid", o["price"])
-                    ask = o.get("ask", o["price"])
-                    spread = o.get("spread", 0)
+                    quote_entry = next(
+                        (
+                            q
+                            for q in mkt.get("quote_snapshot", [])
+                            if q.get("market_id") == o.get("market_id")
+                        ),
+                        None,
+                    )
+                    yes_quote = quote_entry.get("yes", {}) if quote_entry else {}
+                    bid = yes_quote.get("bid")
+                    ask = yes_quote.get("ask")
+                    spread = yes_quote.get("spread")
 
                     # All filters — if any fails, skip this market entirely
-                    if volume >= MIN_VOLUME:
+                    if (
+                        quote_entry
+                        and quote_entry.get("execution_ok")
+                        and bid is not None
+                        and ask is not None
+                        and spread is not None
+                        and volume >= MIN_VOLUME
+                    ):
                         p = bucket_prob(forecast_temp, t_low, t_high, sigma)
                         ev = calc_ev(p, ask)
                         if ev >= MIN_EV:
@@ -1245,43 +1377,10 @@ def scan_and_update():
                                 }
 
                 if best_signal:
-                    # Fetch real bestAsk from Polymarket API for accurate entry price
-                    skip_position = False
-                    try:
-                        r = requests.get(
-                            f"https://gamma-api.polymarket.com/markets/{best_signal['market_id']}",
-                            timeout=(3, 5),
-                        )
-                        mdata = r.json()
-                        real_ask = float(
-                            mdata.get("bestAsk", best_signal["entry_price"])
-                        )
-                        real_bid = float(
-                            mdata.get("bestBid", best_signal["bid_at_entry"])
-                        )
-                        real_spread = round(real_ask - real_bid, 4)
-                        # Re-check slippage and price with real values
-                        if real_spread > MAX_SLIPPAGE or real_ask >= MAX_PRICE:
-                            print(
-                                f"  [SKIP] {loc['name']} {date} — real ask ${real_ask:.3f} spread ${real_spread:.3f}"
-                            )
-                            skip_position = True
-                        else:
-                            best_signal["entry_price"] = real_ask
-                            best_signal["bid_at_entry"] = real_bid
-                            best_signal["spread"] = real_spread
-                            best_signal["shares"] = round(
-                                best_signal["cost"] / real_ask, 2
-                            )
-                            best_signal["ev"] = round(
-                                calc_ev(best_signal["p"], real_ask), 4
-                            )
-                    except Exception as e:
-                        print(
-                            f"  [WARN] Could not fetch real ask for {best_signal['market_id']}: {e}"
-                        )
-
-                    if not skip_position and best_signal["entry_price"] < MAX_PRICE:
+                    if (
+                        best_signal["spread"] <= MAX_SLIPPAGE
+                        and best_signal["entry_price"] < MAX_PRICE
+                    ):
                         balance -= best_signal["cost"]
                         mkt["position"] = best_signal
                         state["total_trades"] += 1
