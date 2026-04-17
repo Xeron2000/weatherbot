@@ -62,7 +62,13 @@ Plans:
   1. 操作者可以为低价 YES 和高价 NO 两条策略腿设置独立资金预算，并看到每条腿当前占用的风险额度。
   2. 机器人会在单市场、单城市、单日期、单策略腿和总资金使用率触达上限时停止继续分配新单。
   3. 当多个温区高度相关或 YES/NO 暴露互相冲突时，机器人会拒绝继续加仓并保留已有暴露的一致性。
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 03-01-PLAN.md — 建立 risk router 配置与最坏损失纯函数合同
+- [x] 03-02-PLAN.md — 将路由账本接入 scan loop 并持久化 state/market 风险事实
+- [x] 03-03-PLAN.md — 补齐 reservation release 与 event conflict reconciliation
+- [x] 03-04-PLAN.md — 在 status/report 中展示预算与暴露并补 README 验证说明
 
 ### Phase 4: 被动挂单与订单恢复
 **Goal**: 操作者可以把候选机会转成可恢复的被动限价单工作流，并在市场变化后自动管理订单生命周期。
@@ -105,7 +111,7 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 2.1 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. 市场语义与扫描基线 | 4/4 | Complete | 2026-04-17 |
 | 2. 候选定价与双策略筛选 | 0/TBD | Not started | - |
-| 3. 资金路由与暴露控制 | 0/TBD | Not started | - |
+| 3. 资金路由与暴露控制 | 0/4 | Planned | - |
 | 4. 被动挂单与订单恢复 | 0/TBD | Not started | - |
 | 5. 保守 paper execution 与回放验证 | 0/TBD | Not started | - |
 | 6. 执行复盘与 readiness 报告 | 0/TBD | Not started | - |

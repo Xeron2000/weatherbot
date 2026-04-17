@@ -17,7 +17,7 @@
 - [x] **STRAT-01**: 操作者可以让机器人根据多源天气预测为每个温区计算 band probability，而不是只看单点温度预测
 - [x] **STRAT-02**: 操作者可以为低价 YES 策略配置独立的价格、概率、时间窗与仓位阈值
 - [x] **STRAT-03**: 操作者可以为高价 NO 策略配置独立的价格、概率、时间窗与仓位阈值
-- [ ] **STRAT-04**: 操作者可以让机器人在低价 YES 和高价 NO 两个策略腿之间独立分配资金，并限制每条腿的最大风险暴露
+- [x] **STRAT-04**: 操作者可以让机器人在低价 YES 和高价 NO 两个策略腿之间独立分配资金，并限制每条腿的最大风险暴露
 
 ### Order Lifecycle
 
@@ -34,8 +34,8 @@
 
 ### Risk Controls
 
-- [ ] **RISK-01**: 操作者可以为单市场、单城市、单日期、单策略腿和总资金使用率设置暴露上限
-- [ ] **RISK-02**: 操作者可以阻止机器人在相关性过高的温区或相互冲突的 YES/NO 暴露上继续加仓
+- [x] **RISK-01**: 操作者可以为单市场、单城市、单日期、单策略腿和总资金使用率设置暴露上限
+- [x] **RISK-02**: 操作者可以阻止机器人在相关性过高的温区或相互冲突的 YES/NO 暴露上继续加仓
 - [x] **RISK-03**: 操作者可以要求机器人在缺少关键市场元数据、规则映射或实时行情时自动停单
 
 ### Observability
@@ -84,7 +84,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRAT-01 | Phase 2 | Complete |
 | STRAT-02 | Phase 2 | Complete |
 | STRAT-03 | Phase 2 | Complete |
-| STRAT-04 | Phase 3 | Pending |
+| STRAT-04 | Phase 3 | Complete |
 | ORDR-01 | Phase 4 | Pending |
 | ORDR-02 | Phase 4 | Pending |
 | ORDR-03 | Phase 4 | Pending |
@@ -92,8 +92,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-01 | Phase 5 | Pending |
 | SIM-02 | Phase 5 | Pending |
 | SIM-03 | Phase 5 | Pending |
-| RISK-01 | Phase 3 | Pending |
-| RISK-02 | Phase 3 | Pending |
+| RISK-01 | Phase 3 | Complete |
+| RISK-02 | Phase 3 | Complete |
 | RISK-03 | Phase 2 | Complete |
 | OBS-01 | Phase 2 | Complete |
 | OBS-02 | Phase 4 | Pending |

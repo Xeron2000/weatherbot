@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-04-17T12:10:24.932Z"
+status: executing
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-04-17T14:32:30.203Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** 在天气市场里稳定抓住“概率对、价格错”的盘口，并用可验证的自动化执行把高赔率机会变成可重复策略。
-**Current focus:** Phase 01 — 市场语义与扫描基线
+**Current focus:** Phase 03 — 资金路由与暴露控制
 
 ## Current Position
 
-Phase: 01 (市场语义与扫描基线) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 03 (资金路由与暴露控制) — PLANNED
+Plan: 4 of 4 executed
+Status: Ready to execute
 Last activity: 2026-04-17
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -59,6 +59,10 @@ Progress: [██████████] 100%
 | Phase 02 P02 | 2 min | 2 tasks | 5 files |
 | Phase 02 P03 | 1 min | 2 tasks | 3 files |
 | Phase 02 P04 | 1 min | 2 tasks | 3 files |
+| Phase 03 P01 | 12 min | 2 tasks | 3 files |
+| Phase 03 P02 | 15 min | 2 tasks | 2 files |
+| Phase 03 P03 | 14 min | 2 tasks | 2 files |
+| Phase 03 P04 | 10 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -86,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 02]: candidate_assessments 直接持久化到 market JSON，作为后续报告与订单层共用事实源。
 - [Phase 02]: reporting 直接读取 candidate_assessments，不在展示层重算 fair price、status 或 reasons。
 - [Phase 02]: 候选摘要继续与持仓/战绩统计分离，避免把 candidate 数混进 open/resolved trade 指标。
+- [Phase 03]: risk_router 作为独立顶层配置块落地，集中定义 YES/NO budget 与 hard cap。
+- [Phase 03]: risk_state 采用从 market reservations 回放重建的账本模式，避免 scan 过程内存态漂移。
+- [Phase 03]: 已有 reservation 在连续扫描中优先保留，新冲突候选统一拒绝并保留 release_reason。
 
 ### Pending Todos
 
@@ -98,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T12:10:24.930Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-04-17T14:32:30.201Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
