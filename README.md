@@ -127,6 +127,9 @@ All data is saved to `data/markets/` — one JSON file per market. Each file con
 - Phase 2 probability truth in `bucket_probabilities`
 - Phase 2 execution truth in `quote_snapshot`
 - Phase 2 candidate explanations in `candidate_assessments`
+- Phase 3 portfolio ledger in `risk_state` inside `data/state.json`
+- Phase 3 route audit trail in `route_decisions`
+- Phase 3 active/released reservation facts in `reserved_exposure`
 - Position details (entry, stop, PnL)
 - Final resolution outcome
 
@@ -161,6 +164,24 @@ Phase 2 adds three persisted fact sources to each admissible market JSON:
 - `candidate_assessments` — operator-facing YES/NO candidate outputs with `strategy_leg`, `status`, `reasons`, `fair_price`, and quote context
 
 `python weatherbet.py status` and `python weatherbet.py report` now show candidate explanation summaries directly from `candidate_assessments`, so you can inspect accepted, rejected, size-down, and reprice outcomes before any trades resolve.
+
+---
+
+## Phase 3 Verification
+
+Run the combined Phase 2 + Phase 3 regression suite locally with:
+
+```bash
+uv run pytest tests/test_phase2_probability.py tests/test_phase2_quotes.py tests/test_phase2_strategies.py tests/test_phase2_reporting.py tests/test_phase3_router.py tests/test_phase3_scan_loop.py tests/test_phase3_reporting.py -q
+```
+
+Phase 3 adds three persisted risk facts:
+
+- `risk_state` — bankroll-level risk ledger in `data/state.json`, including YES/NO budgets, reserved worst-loss, and city/date/event exposure rollups
+- `route_decisions` — per-market routing audit trail showing accepted/rejected decisions, budget buckets, reserved worst-loss, and reason codes
+- `reserved_exposure` — the currently reserved exposure for a market, plus `release_reason` when a reservation is downgraded, missing, or invalidated
+
+`python weatherbet.py status` and `python weatherbet.py report` now surface YES/NO budget usage, global worst-loss usage, exposure rollups, and common reject/release reasons directly from those persisted facts.
 
 ---
 
