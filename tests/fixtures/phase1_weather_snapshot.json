@@ -1,0 +1,26 @@
+{
+  "fresh": {
+    "ts": "2035-04-17T12:00:00+00:00",
+    "best": 53,
+    "best_source": "ecmwf",
+    "ecmwf": 53,
+    "hrrr": 54,
+    "metar": 52
+  },
+  "stale": {
+    "ts": "2020-04-17T12:00:00+00:00",
+    "best": 53,
+    "best_source": "ecmwf",
+    "ecmwf": 53,
+    "hrrr": 54,
+    "metar": 52
+  },
+  "missing": {
+    "ts": null,
+    "best": null,
+    "best_source": null,
+    "ecmwf": null,
+    "hrrr": null,
+    "metar": null
+  }
+}

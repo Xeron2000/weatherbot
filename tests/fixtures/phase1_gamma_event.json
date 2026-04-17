@@ -1,0 +1,35 @@
+{
+  "id": "evt-nyc-2026-04-17",
+  "slug": "highest-temperature-in-nyc-on-april-17-2026",
+  "title": "Highest temperature in New York City on April 17, 2026?",
+  "endDate": "2026-04-17T23:59:00Z",
+  "description": "Temperature resolves from the official LaGuardia Airport observations.",
+  "rules": "This market resolves based on the highest temperature recorded at LaGuardia Airport (KLGA) in °F. Temperatures are rounded to the nearest whole degree using the official airport reading.",
+  "conditionId": "event-condition-nyc-2026-04-17",
+  "markets": [
+    {
+      "id": "mkt-nyc-52-53",
+      "question": "Will the highest temperature in New York City be between 52-53°F on April 17, 2026?",
+      "volume": 1842,
+      "outcomePrices": "[0.12, 0.88]",
+      "conditionId": "cond-nyc-52-53",
+      "clobTokenIds": "[\"yes-nyc-52-53\", \"no-nyc-52-53\"]"
+    },
+    {
+      "id": "mkt-nyc-54-55",
+      "question": "Will the highest temperature in New York City be between 54-55°F on April 17, 2026?",
+      "volume": 1599,
+      "outcomePrices": "[0.08, 0.92]",
+      "conditionId": "cond-nyc-54-55",
+      "clobTokenIds": "[\"yes-nyc-54-55\", \"no-nyc-54-55\"]"
+    },
+    {
+      "id": "mkt-nyc-56-below",
+      "question": "Will the highest temperature in New York City be 56°F or below on April 17, 2026?",
+      "volume": 950,
+      "outcomePrices": "[0.31, 0.69]",
+      "conditionId": "cond-nyc-56-below",
+      "clobTokenIds": "[\"yes-nyc-56-below\", \"no-nyc-56-below\"]"
+    }
+  ]
+}
