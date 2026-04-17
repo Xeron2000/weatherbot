@@ -185,3 +185,92 @@ def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
     assert accepted[0]["range"] == [65.0, 69.0]
     assert accepted[0]["reserved_worst_loss"] == 20.0
     assert any("global_cap_exceeded" in item["reasons"] for item in rejected)
+
+
+def test_release_reservation_when_candidate_is_downgraded(
+    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    city, target_date = prepare_single_market(
+        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
+    )
+    assessments = [
+        [make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09)],
+        [make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.01, status="rejected")],
+    ]
+    monkeypatch.setattr(
+        bot_v2,
+        "build_candidate_assessments",
+        lambda *_args, **_kwargs: assessments.pop(0),
+    )
+
+    bot_v2.scan_and_update()
+    bot_v2.scan_and_update()
+
+    state = bot_v2.load_state()
+    market = bot_v2.load_market(city, target_date)
+
+    assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
+    assert market["reserved_exposure"]["release_reason"] == "candidate_downgraded"
+    assert market["reserved_exposure"]["reserved_worst_loss"] == 0.0
+
+
+def test_release_reservation_when_candidate_is_missing(
+    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    city, target_date = prepare_single_market(
+        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
+    )
+    assessments = [
+        [make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09)],
+        [],
+    ]
+    monkeypatch.setattr(
+        bot_v2,
+        "build_candidate_assessments",
+        lambda *_args, **_kwargs: assessments.pop(0),
+    )
+
+    bot_v2.scan_and_update()
+    bot_v2.scan_and_update()
+
+    state = bot_v2.load_state()
+    market = bot_v2.load_market(city, target_date)
+
+    assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
+    assert market["reserved_exposure"]["release_reason"] == "candidate_missing"
+
+
+def test_same_bucket_conflict_keeps_existing_reservation(
+    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    city, target_date = prepare_single_market(
+        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
+    )
+    assessments = [
+        [make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09)],
+        [
+            make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09),
+            make_assessment("NO_CARRY", "no", (65.0, 69.0), 0.08),
+        ],
+    ]
+    monkeypatch.setattr(
+        bot_v2,
+        "build_candidate_assessments",
+        lambda *_args, **_kwargs: assessments.pop(0),
+    )
+
+    bot_v2.scan_and_update()
+    bot_v2.scan_and_update()
+
+    state = bot_v2.load_state()
+    market = bot_v2.load_market(city, target_date)
+
+    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
+    assert market["reserved_exposure"]["strategy_leg"] == "YES_SNIPER"
+    assert any(
+        item["status"] == "rejected" and "same_bucket_conflict" in item["reasons"]
+        for item in market["route_decisions"]
+    )
