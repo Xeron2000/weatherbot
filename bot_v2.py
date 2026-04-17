@@ -1685,6 +1685,48 @@ def format_resolution_text(text, limit=120):
     return summary[: limit - 3].rstrip() + "..."
 
 
+def format_quote_context(quote_context):
+    if not quote_context:
+        return "quote=unknown"
+    parts = []
+    if quote_context.get("ask") is not None:
+        parts.append(f"ask={quote_context['ask']:.2f}")
+    if quote_context.get("bid") is not None:
+        parts.append(f"bid={quote_context['bid']:.2f}")
+    if quote_context.get("book_ok") is not None:
+        parts.append(f"book_ok={quote_context['book_ok']}")
+    return "quote=" + " ".join(parts) if parts else "quote=unknown"
+
+
+def print_candidate_assessments(markets):
+    entries = []
+    for m in sorted(markets, key=lambda x: (x.get("date", ""), x.get("city", ""))):
+        for assessment in m.get("candidate_assessments", []) or []:
+            entries.append((m, assessment))
+
+    if not entries:
+        return
+
+    print(f"\n  Candidate assessments: {len(entries)}")
+    for market, assessment in entries:
+        rng = assessment.get("range") or (None, None)
+        bucket = (
+            f"{rng[0]}-{rng[1]}"
+            if rng[0] is not None and rng[1] is not None
+            else "unknown"
+        )
+        reasons = ",".join(assessment.get("reasons", [])) or "none"
+        fair_price = assessment.get("fair_price")
+        fair_text = (
+            f"fair={fair_price:.3f}" if fair_price is not None else "fair=unknown"
+        )
+        quote_text = format_quote_context(assessment.get("quote_context", {}))
+        print(
+            f"    {market['city_name']:<16} {market['date']} | {assessment.get('strategy_leg')} | {bucket} | "
+            f"status={assessment.get('status')} | reasons={reasons} | {fair_text} | {quote_text}"
+        )
+
+
 def print_scan_summary(markets):
     accepted = [m for m in markets if m.get("last_scan_status") == "ready"]
     skipped = [m for m in markets if m.get("last_scan_status") == "skipped"]
@@ -1716,6 +1758,8 @@ def print_scan_summary(markets):
             if not reasons:
                 reasons = m.get("last_scan_reason") or "unknown"
             print(f"    {m['city_name']:<16} {m['date']} | {reasons}")
+
+    print_candidate_assessments(markets)
 
 
 def print_status():
