@@ -30,6 +30,7 @@ def test_resolution_metadata_uses_event_and_location_contract(phase1_gamma_event
     assert metadata["unit"] == "F"
     assert "LaGuardia Airport" in metadata["resolution_text"]
     assert metadata["resolution_source"] in {"rules", "title", "rules+location"}
+    assert metadata["rounding_rule"] == "nearest_degree"
 
 
 def test_build_market_contracts_rejects_missing_contract_identifiers(
@@ -43,6 +44,18 @@ def test_build_market_contracts_rejects_missing_contract_identifiers(
 
     assert contracts["contracts"] == []
     assert "missing_contract_identifiers" in contracts["skip_reasons"]
+
+
+def test_build_market_contracts_returns_condition_and_token_ids(phase1_gamma_event):
+    contracts = call_helper("build_market_contracts", phase1_gamma_event, "F")
+
+    assert contracts["skip_reasons"] == []
+    first_contract = contracts["contracts"][0]
+    assert first_contract["market_id"] == "mkt-nyc-52-53"
+    assert first_contract["condition_id"] == "cond-nyc-52-53"
+    assert first_contract["token_id_yes"] == "yes-nyc-52-53"
+    assert first_contract["token_id_no"] == "no-nyc-52-53"
+    assert first_contract["range"] == (52.0, 53.0)
 
 
 def test_guardrails_reject_unit_mismatch(phase1_gamma_event, phase1_weather_snapshot):
