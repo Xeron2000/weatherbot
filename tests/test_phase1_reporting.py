@@ -53,6 +53,10 @@ def test_print_status_shows_accepted_and_skipped_scan_semantics(
     assert "KLGA" in out
     assert "52.0-53.0F" in out
     assert "mkt-nyc-52-53" in out
+    assert "LaGuardia Airport" in out
+    assert "condition_id=cond-nyc-52-53" in out
+    assert "yes=yes-nyc-52-53" in out
+    assert "no=no-nyc-52-53" in out
     assert "unit_mismatch, missing_rule_mapping" in out
 
 
@@ -85,6 +89,10 @@ def test_print_report_keeps_scan_summary_separate_from_trade_counts(
     assert "No resolved markets yet." in out
     assert "Accepted scan markets" in out
     assert "Skipped scan markets" in out
+    assert "LaGuardia Airport" in out
+    assert "condition_id=cond-nyc-52-53" in out
+    assert "yes=yes-nyc-52-53" in out
+    assert "no=no-nyc-52-53" in out
     assert "weather_data_stale" in out
 
 
