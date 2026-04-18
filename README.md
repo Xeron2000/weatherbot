@@ -99,6 +99,15 @@ Create `config.json` in the project folder:
     "max_hours": 72.0,
     "max_size": 20.0,
     "min_size": 1.0
+  },
+  "paper_execution": {
+    "submission_latency_ms": 5000,
+    "queue_ahead_shares": 80.0,
+    "queue_ahead_ratio": 0.25,
+    "touch_not_fill_min_touches": 1,
+    "partial_fill_slice_ratio": 0.5,
+    "cancel_latency_ms": 4000,
+    "adverse_fill_buffer_ticks": 1
   }
 }
 ```
