@@ -48,12 +48,29 @@ uv sync
 
 项目默认从仓库根目录读取 `config.json`，核心字段包括：
 
+- 资金档位选择：`strategy_profile`（可选 `100` / `1000` / `10000`）
 - 顶层资金与扫描参数：`balance`、`min_volume`、`min_hours`、`max_hours`、`scan_interval`
 - 策略块：`yes_strategy`、`no_strategy`
 - 风控块：`risk_router`
 - 订单策略：`order_policy`
 - Paper execution：`paper_execution`
 - 结算温度拉取：`vc_key`
+
+提交态 `config.json` 已经内置三档可运行预设：
+
+- `100`：更激进，允许更高 kelly、更宽预算和更主动的 YES/NO sizing
+- `1000`：中间档，作为默认档位
+- `10000`：更保守，更低 kelly、更紧 cap 和更严格阈值
+
+切换方式只需要改一个字段：
+
+```json
+{
+  "strategy_profile": "1000"
+}
+```
+
+运行时会先按所选 profile 深度 merge 出最终配置，然后 `weatherbot` / `bot_v2` 入口直接消费这份 merge 后结果；如果旧配置没有 `strategy_profile` / `strategy_profiles` 字段，则继续按原来的顶层配置运行。
 
 Visual Crossing key 现在走**环境变量优先**：运行时会先读取 `VISUAL_CROSSING_KEY`，只有未设置该环境变量时才回退到 `config.json` 里的 `vc_key`。
 
