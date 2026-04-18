@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready
 stopped_at: Completed 05-VERIFICATION.md
-last_updated: "2026-04-18T07:54:13Z"
-last_activity: 2026-04-18 - Completed quick task 260418-lza: 收紧提交态 config.json 的 YES/NO 参数面
+last_updated: "2026-04-18T08:17:17Z"
+last_activity: 2026-04-18 - Completed quick task 260418-mbm: 为 NO 大资金持仓增加止损，YES 不加止损
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-lza: 收紧提交态 config.json 的 YES/NO 参数面
+Last activity: 2026-04-18 - Completed quick task 260418-mbm: 为 NO 大资金持仓增加止损，YES 不加止损
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -135,6 +135,7 @@ None yet.
 | 260418-l91 | 改成 Visual Crossing env-first 配置并清理可提交配置面 | 2026-04-18 | f49ddd1 | Verified | [260418-l91-visual-crossing-key-env-example-no-strat](./quick/260418-l91-visual-crossing-key-env-example-no-strat/) |
 | 260418-lza | 收紧提交态 config.json 的 YES/NO 参数面 | 2026-04-18 | 0ed3a63 | Verified | [260418-lza-config-json-yes-no](./quick/260418-lza-config-json-yes-no/) |
 | 260418-lo8 | 将运行时 data/ 目录加入 .gitignore | 2026-04-18 | local-only | Verified | [260418-lo8-data-gitignore-data](./quick/260418-lo8-data-gitignore-data/) |
+| 260418-mbm | 为 NO 大资金持仓增加止损，YES 不加止损 | 2026-04-18 | e0ef121 | Verified | [260418-mbm-no-price-0-80-no-0-70-yes](./quick/260418-mbm-no-price-0-80-no-0-70-yes/) |
 
 ## Session Continuity
 
