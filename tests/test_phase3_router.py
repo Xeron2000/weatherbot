@@ -220,6 +220,7 @@ def test_sort_leg_candidates_orders_by_edge_then_liquidity():
 
 
 def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
+    monkeypatch.setattr(bot_v2._strategy, "NO_KELLY_FRACTION", 1.0, raising=False)
     monkeypatch.setattr(
         bot_v2,
         "YES_STRATEGY",
@@ -265,6 +266,7 @@ def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
 
 
 def test_no_candidate_worst_loss_and_route_use_no_specific_scaling(monkeypatch):
+    monkeypatch.setattr(bot_v2._strategy, "NO_KELLY_FRACTION", 1.5, raising=False)
     monkeypatch.setattr(
         bot_v2,
         "YES_STRATEGY",
