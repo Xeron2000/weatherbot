@@ -260,3 +260,58 @@ def test_load_state_excludes_terminal_orders_from_active_restore(
     assert state["order_state"]["status_counts"]["canceled"] == 1
     assert state["order_state"]["status_counts"]["filled"] == 1
     assert state["order_state"]["status_counts"]["expired"] == 1
+
+
+def test_monitor_positions_keeps_legacy_position_compatible_without_side_fields(
+    tmp_path, monkeypatch
+):
+    configure_runtime_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(bot_v2, "LOCATIONS", {"nyc": bot_v2.LOCATIONS["nyc"]})
+    monkeypatch.setattr(bot_v2.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        bot_v2,
+        "get_token_quote_snapshot",
+        lambda token_id, side: {
+            "token_id": token_id,
+            "side": side,
+            "book_ok": True,
+            "bid": 0.2,
+        },
+    )
+
+    market = {
+        "city": "nyc",
+        "date": "2026-04-17",
+        "event_end_date": "2026-04-19T23:59:00Z",
+        "position": {
+            "market_id": "mkt-65-69",
+            "entry_price": 0.34,
+            "shares": 10.0,
+            "cost": 3.4,
+            "status": "open",
+            "stop_price": 0.32,
+        },
+        "all_outcomes": [
+            {
+                "market_id": "mkt-65-69",
+                "token_id_yes": "yes-65-69",
+                "bid": 0.2,
+                "price": 0.21,
+            }
+        ],
+        "quote_snapshot": [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"token_id": "yes-65-69"},
+                "no": {},
+            }
+        ],
+    }
+    write_market(bot_v2, market)
+
+    closed = bot_v2.monitor_positions()
+    updated = bot_v2.load_market("nyc", "2026-04-17")
+
+    assert closed == 1
+    assert updated["position"]["status"] == "closed"
+    assert updated["position"]["close_reason"] == "stop_loss"

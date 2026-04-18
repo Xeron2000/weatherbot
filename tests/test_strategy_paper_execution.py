@@ -128,6 +128,42 @@ def test_build_passive_order_intent_has_stable_reasons_and_deterministic_order(m
     assert built["order"]["expires_at"] == "2026-04-18T18:00:00+00:00"
 
 
+def test_build_position_from_order_persists_side_metadata(monkeypatch):
+    configure_paper_execution_runtime(monkeypatch)
+    market = make_market()
+    order = {
+        "market_id": "mkt-65-69",
+        "token_side": "no",
+        "range": [65.0, 69.0],
+        "filled_shares": 100.0,
+        "limit_price": 0.82,
+        "updated_at": "2026-04-18T12:00:00+00:00",
+        "history": [
+            {
+                "status": "filled",
+                "reason": "quote_touched_limit",
+                "ts": "2026-04-18T12:00:00+00:00",
+                "fill_shares": 100.0,
+                "fill_price": 0.82,
+            }
+        ],
+    }
+    assessment = {
+        "aggregate_probability": 0.18,
+        "fair_no": 0.82,
+        "edge": 0.0,
+        "quote_context": {"bid": 0.81, "spread": 0.02},
+    }
+    forecast_snap = {"best": 67.0, "best_source": "ecmwf"}
+
+    position = paper_execution.build_position_from_order(
+        market, order, assessment, forecast_snap
+    )
+
+    assert position["token_side"] == "no"
+    assert position["entry_side"] == "no"
+
+
 def test_apply_order_transition_appends_history_and_rejects_invalid_status():
     order = {
         "shares": 200.0,
