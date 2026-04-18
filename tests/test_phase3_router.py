@@ -272,7 +272,7 @@ def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        bot_v2,
+        bot_v2._strategy,
         "NO_STRATEGY",
         {
             "min_price": 0.65,
@@ -283,6 +283,7 @@ def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
             "max_size": 20.0,
             "min_size": 1.0,
         },
+        raising=False,
     )
 
     yes_assessment = make_assessment(
@@ -318,7 +319,7 @@ def test_no_candidate_worst_loss_and_route_use_no_specific_scaling(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        bot_v2,
+        bot_v2._strategy,
         "NO_STRATEGY",
         {
             "min_price": 0.65,
@@ -329,6 +330,7 @@ def test_no_candidate_worst_loss_and_route_use_no_specific_scaling(monkeypatch):
             "max_size": 30.0,
             "min_size": 1.0,
         },
+        raising=False,
     )
     monkeypatch.setattr(bot_v2, "NO_KELLY_FRACTION", 1.5, raising=False)
     monkeypatch.setattr(bot_v2, "KELLY_FRACTION", 0.01)

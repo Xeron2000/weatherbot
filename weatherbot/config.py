@@ -58,9 +58,7 @@ def _drop_removed_runtime_fields(config_dict):
 def load_risk_router_config(config_dict):
     router = {
         "yes_budget_pct": 0.30,
-        "no_budget_pct": 0.70,
         "yes_leg_cap_pct": 0.30,
-        "no_leg_cap_pct": 0.70,
         "global_usage_cap_pct": 0.85,
         "per_market_cap_pct": 0.08,
         "per_city_cap_pct": 0.18,
@@ -82,14 +80,13 @@ def load_risk_router_config(config_dict):
 def load_order_policy_config(config_dict):
     policy = {
         "yes_time_in_force": "GTC",
-        "no_time_in_force": "GTD",
         "gtd_buffer_hours": 6.0,
         "price_improve_ticks": 1,
         "replace_edge_buffer": 0.02,
         "max_order_hours_open": 72.0,
     }
     raw = config_dict.get("order_policy", {}) or {}
-    tif_keys = ["yes_time_in_force", "no_time_in_force"]
+    tif_keys = ["yes_time_in_force"]
     for key in tif_keys:
         value = str(raw.get(key, policy[key]) or policy[key]).upper()
         if value not in {"GTC", "GTD"}:
