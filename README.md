@@ -56,21 +56,23 @@ uv sync
 - Paper execution：`paper_execution`
 - 结算温度拉取：`vc_key`
 
-提交态 `config.json` 已经内置三档可运行预设：
+提交态 `config.json` 已经内置三档可运行预设，当前默认档位是 `100`：
 
-- `100`：更激进，允许更高 kelly、更宽预算和更主动的 YES/NO sizing
-- `1000`：中间档，作为默认档位
+- `100`：当前默认档，YES 是主力腿，`yes_budget_pct 0.65` / `no_budget_pct 0.35`，NO 只保留更稀有且更挑剔的机会，核心过滤是 `0.80 / 0.90 / 0.95 / 0.05`
+- `1000`：中间档，YES/NO 更平衡，预算为 `0.3 / 0.7`
 - `10000`：更保守，更低 kelly、更紧 cap 和更严格阈值
 
 切换方式只需要改一个字段：
 
 ```json
 {
-  "strategy_profile": "1000"
+  "strategy_profile": "100"
 }
 ```
 
 运行时会先按所选 profile 深度 merge 出最终配置，然后 `weatherbot` / `bot_v2` 入口直接消费这份 merge 后结果；如果旧配置没有 `strategy_profile` / `strategy_profiles` 字段，则继续按原来的顶层配置运行。
+
+当前默认 `100` 档的直觉应该是：YES 继续负责主力样本，NO 退回高确定性稀有机会腿；这次没有引入 depth filter，只是把 100 档预算和 NO 阈值收紧到当前提交态真实值。
 
 Visual Crossing key 现在走**环境变量优先**：运行时会先读取 `VISUAL_CROSSING_KEY`，只有未设置该环境变量时才回退到 `config.json` 里的 `vc_key`。
 
