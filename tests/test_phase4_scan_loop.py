@@ -459,100 +459,28 @@ def test_scan_and_update_cancels_when_market_is_no_longer_ready(
     assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
 
 
-def test_scan_and_update_expires_gtd_orders(
+def test_scan_and_update_expires_yes_orders(
     phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
     city, _month, event = prepare_single_market(
         monkeypatch, phase2_gamma_event, phase2_weather_snapshot
     )
-    no_event = dict(event)
-    no_event["payload"] = dict(event["payload"])
-    no_market = dict(no_event["payload"]["markets"][0])
-    no_market["question"] = "Between 70-74F"
-    no_market["id"] = "mkt-70-74"
-    no_market["clobTokenIds"] = '["yes-70-74","no-70-74"]'
-    no_event["payload"]["markets"] = [no_market]
-
     patch_scan_inputs(
         monkeypatch,
         city,
-        no_event,
+        event,
         [event["default_snapshot"], event["default_snapshot"]],
     )
     patch_probability_and_candidates(
         monkeypatch,
         [
-            [
-                make_assessment(
-                    strategy_leg="NO_CARRY",
-                    token_side="no",
-                    bucket_range=(70.0, 74.0),
-                )
-            ],
-            [
-                make_assessment(
-                    strategy_leg="NO_CARRY",
-                    token_side="no",
-                    bucket_range=(70.0, 74.0),
-                )
-            ],
+            [make_assessment()],
+            [make_assessment()],
         ],
         [
-            [
-                {
-                    "market_id": "mkt-70-74",
-                    "question": "Between 70-74F",
-                    "range": (70.0, 74.0),
-                    "yes": {
-                        "bid": 0.05,
-                        "ask": 0.07,
-                        "bid_size": 500.0,
-                        "ask_size": 500.0,
-                        "tick_size": 0.01,
-                        "min_order_size": 1.0,
-                        "spread": 0.02,
-                    },
-                    "no": {
-                        "bid": 0.81,
-                        "ask": 0.83,
-                        "bid_size": 500.0,
-                        "ask_size": 500.0,
-                        "tick_size": 0.01,
-                        "min_order_size": 1.0,
-                        "spread": 0.02,
-                    },
-                    "execution_ok": True,
-                    "execution_stop_reasons": [],
-                }
-            ],
-            [
-                {
-                    "market_id": "mkt-70-74",
-                    "question": "Between 70-74F",
-                    "range": (70.0, 74.0),
-                    "yes": {
-                        "bid": 0.05,
-                        "ask": 0.07,
-                        "bid_size": 500.0,
-                        "ask_size": 500.0,
-                        "tick_size": 0.01,
-                        "min_order_size": 1.0,
-                        "spread": 0.02,
-                    },
-                    "no": {
-                        "bid": 0.81,
-                        "ask": 0.83,
-                        "bid_size": 500.0,
-                        "ask_size": 500.0,
-                        "tick_size": 0.01,
-                        "min_order_size": 1.0,
-                        "spread": 0.02,
-                    },
-                    "execution_ok": True,
-                    "execution_stop_reasons": [],
-                }
-            ],
+            [make_quote_snapshot()],
+            [make_quote_snapshot()],
         ],
     )
     monkeypatch.setattr(
@@ -560,9 +488,9 @@ def test_scan_and_update_expires_gtd_orders(
         "aggregate_probability",
         lambda *_args, **_kwargs: [
             {
-                "market_id": "mkt-70-74",
-                "question": "Between 70-74F",
-                "range": (70.0, 74.0),
+                "market_id": "mkt-65-69",
+                "question": "Between 65-69F",
+                "range": (65.0, 69.0),
                 "aggregate_probability": 0.20,
                 "fair_yes": 0.20,
                 "fair_no": 0.80,
@@ -573,7 +501,7 @@ def test_scan_and_update_expires_gtd_orders(
     )
 
     bot_v2.scan_and_update()
-    market = bot_v2.load_market(city, no_event["target_date"])
+    market = bot_v2.load_market(city, event["target_date"])
     market["active_order"]["expires_at"] = (
         datetime.now(timezone.utc) - timedelta(minutes=1)
     ).isoformat()
@@ -582,7 +510,7 @@ def test_scan_and_update_expires_gtd_orders(
     bot_v2.scan_and_update()
 
     state = bot_v2.load_state()
-    market = bot_v2.load_market(city, no_event["target_date"])
+    market = bot_v2.load_market(city, event["target_date"])
 
     assert market["active_order"] is None
     assert market["order_history"][-1]["status"] == "expired"
