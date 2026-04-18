@@ -6,6 +6,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
+from . import paper_execution
 from .config import load_config
 from .domain import TIMEZONES
 from .polymarket import normalize_skip_reasons, quote_for_side
@@ -296,6 +297,9 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
     quote = quote_for_side(quote_snapshot, "no")
     fair_price = bucket_probability.get("fair_no")
     ask = quote.get("ask")
+    target_price, target_reason = paper_execution.compute_passive_limit_price(
+        quote, paper_execution.ORDER_POLICY
+    )
     max_ask = NO_STRATEGY.get("max_ask")
     reasons.extend(
         missing_strategy_fields(
@@ -316,16 +320,20 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
         reasons.append("outside_strategy_window")
     if quote_snapshot and quote_snapshot.get("execution_stop_reasons"):
         reasons.extend(quote_snapshot.get("execution_stop_reasons", []))
-    if ask is None:
+    if target_reason:
         reasons.append("missing_quote_price")
-    if ask is not None and ask < NO_STRATEGY.get("min_price", 0.0):
+    if target_price is not None and target_price < NO_STRATEGY.get("min_price", 0.0):
         reasons.append("price_below_min")
     if ask is not None and max_ask is not None and ask > max_ask:
         reasons.append("ask_above_max")
     if bucket_probability.get("fair_no", 0.0) < NO_STRATEGY.get("min_probability", 0.0):
         reasons.append("probability_below_min")
 
-    edge = round((fair_price or 0.0) - (ask or 0.0), 6) if ask is not None else None
+    edge = (
+        round((fair_price or 0.0) - target_price, 6)
+        if target_price is not None
+        else None
+    )
     if edge is None:
         status = "rejected"
         size_multiplier = 0.0

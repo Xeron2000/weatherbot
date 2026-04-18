@@ -211,7 +211,7 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
         {
             "market_id": "mkt-65-69",
             "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-            "no": {"bid": 0.9, "ask": 0.74, "spread": 0.03},
+            "no": {"bid": 0.72, "ask": 0.74, "spread": 0.02, "tick_size": 0.01},
             "execution_stop_reasons": [],
         }
     ]
@@ -255,7 +255,7 @@ def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeyp
             {
                 "market_id": "mkt-65-69",
                 "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.01, "ask": 0.88, "spread": 0.87},
+                "no": {"bid": 0.01, "ask": 0.88, "spread": 0.87, "tick_size": 0.01},
                 "execution_stop_reasons": [],
             }
         ],
@@ -288,7 +288,7 @@ def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch
                 "range": [65.0, 69.0],
                 "aggregate_probability": 0.1,
                 "fair_yes": 0.1,
-                "fair_no": 0.9,
+                "fair_no": 0.91,
             }
         ],
         [
@@ -312,7 +312,7 @@ def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch
 
     assert no_assessment["status"] == "accepted"
     assert no_assessment["reasons"] == []
-    assert no_assessment["edge"] == 0.07
+    assert no_assessment["edge"] == 0.08
 
 
 def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypatch):
@@ -369,7 +369,7 @@ def test_no_assessment_marks_ask_above_max_as_non_executable(monkeypatch):
             {
                 "market_id": "mkt-65-69",
                 "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.96, "ask": 0.99, "spread": 0.03},
+                "no": {"bid": 0.96, "ask": 0.99, "spread": 0.03, "tick_size": 0.01},
                 "execution_stop_reasons": [],
             }
         ],
@@ -406,7 +406,7 @@ def test_no_assessment_keeps_valid_no_ask_executable_under_max_ask(monkeypatch):
             {
                 "market_id": "mkt-65-69",
                 "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.85, "ask": 0.88, "spread": 0.03},
+                "no": {"bid": 0.85, "ask": 0.88, "spread": 0.03, "tick_size": 0.01},
                 "execution_stop_reasons": [],
             }
         ],

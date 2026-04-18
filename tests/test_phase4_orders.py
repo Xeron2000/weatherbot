@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 import bot_v2
 
@@ -179,7 +180,10 @@ def test_build_passive_order_intent_sets_gtd_expiry_and_rejects_unaccepted_route
 
     assert gtd_built["reason"] is None
     assert gtd_built["order"]["time_in_force"] == "GTD"
-    assert gtd_built["order"]["expires_at"] == "2026-04-17T18:00:00+00:00"
+    assert gtd_built["order"]["expires_at"] == (
+        datetime.fromisoformat(now_ts)
+        + timedelta(hours=bot_v2.ORDER_POLICY["gtd_buffer_hours"])
+    ).isoformat()
 
     blocked = bot_v2.build_passive_order_intent(
         market,
