@@ -38,7 +38,8 @@ def main(argv=None, runtime=None):
                 order_filter = argv[idx + 1]
                 idx += 2
             else:
-                raise SystemExit(f"Unknown replay arg: {token}")
+                print(f"Unknown replay arg: {token}")
+                raise SystemExit(1)
         print_replay(limit=limit, market_filter=market_filter, order_filter=order_filter)
     else:
         print(f"Unknown command: {cmd}")

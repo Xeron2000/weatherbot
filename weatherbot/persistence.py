@@ -2,6 +2,20 @@ import json
 
 from datetime import datetime, timezone
 
+from .config import load_config, load_risk_router_config
+from .domain import LOCATIONS
+from .paper_execution import build_empty_paper_execution_state, ensure_market_order_defaults, restore_order_state_from_markets
+from .paths import CALIBRATION_FILE, MARKETS_DIR, STATE_FILE
+from .strategy import restore_risk_state_from_markets
+
+
+_cfg = load_config()
+
+BALANCE = _cfg.get("balance", 10000.0)
+CALIBRATION_MIN = _cfg.get("calibration_min", 30)
+RISK_ROUTER = load_risk_router_config(_cfg)
+_cal = {}
+
 
 SIGMA_F = 2.0
 SIGMA_C = 1.2
@@ -174,4 +188,3 @@ def save_state(state):
     STATE_FILE.write_text(
         json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-
