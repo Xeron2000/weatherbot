@@ -297,8 +297,10 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
     quote = quote_for_side(quote_snapshot, "no")
     fair_price = bucket_probability.get("fair_no")
     ask = quote.get("ask")
-    target_price, target_reason = paper_execution.compute_passive_limit_price(
-        quote, paper_execution.ORDER_POLICY
+    target_price, target_reason = paper_execution.compute_no_anchored_limit_price(
+        quote,
+        fair_price,
+        paper_execution.ORDER_POLICY,
     )
     max_ask = NO_STRATEGY.get("max_ask")
     reasons.extend(

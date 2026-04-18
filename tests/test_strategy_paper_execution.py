@@ -313,7 +313,7 @@ def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch
 
     assert no_assessment["status"] == "accepted"
     assert no_assessment["reasons"] == []
-    assert no_assessment["edge"] == 0.08
+    assert no_assessment["edge"] == 0.1
 
 
 def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypatch):
@@ -325,9 +325,9 @@ def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypat
             {
                 "market_id": "mkt-65-69",
                 "range": [65.0, 69.0],
-                "aggregate_probability": 0.04,
-                "fair_yes": 0.04,
-                "fair_no": 0.96,
+                "aggregate_probability": 0.3,
+                "fair_yes": 0.3,
+                "fair_no": 0.7,
             }
         ],
         [
@@ -351,7 +351,7 @@ def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypat
 
     assert no_assessment["status"] == "reprice"
     assert no_assessment["reasons"] == ["price_below_min"]
-    assert no_assessment["edge"] == 0.34
+    assert no_assessment["edge"] == 0.1
 
 
 def test_no_assessment_marks_ask_above_max_as_non_executable(monkeypatch):
@@ -460,8 +460,8 @@ def test_no_passive_order_shares_scale_with_reserved_worst_loss_only(monkeypatch
     assert baseline["reason"] is None
     assert scaled["reason"] is None
     assert no_reservation["reserved_worst_loss"] == 22.5
-    assert baseline["order"]["shares"] == 18.0723
-    assert scaled["order"]["shares"] == 27.1084
+    assert baseline["order"]["shares"] == 20.8333
+    assert scaled["order"]["shares"] == 31.25
     assert scaled["order"]["time_in_force"] == "GTC"
     assert scaled["order"]["expires_at"] is None
 
