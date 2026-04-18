@@ -88,6 +88,14 @@ def test_load_risk_router_config_keeps_independent_leg_budgets():
     assert router["no_leg_cap_pct"] == 0.70
 
 
+def test_config_json_contains_no_specific_sizing_controls():
+    with open("config.json", encoding="utf-8") as handle:
+        config_dict = json.load(handle)
+
+    assert config_dict["no_kelly_fraction"] == 1.5
+    assert config_dict["no_strategy"]["max_size"] > config_dict["yes_strategy"]["max_size"]
+
+
 def test_route_candidate_assessment_rejects_each_budget_and_cap_reason():
     market = make_market()
     assessment = make_assessment()
@@ -254,6 +262,62 @@ def test_candidate_worst_loss_uses_strategy_size_not_quote_price(monkeypatch):
 
     assert bot_v2.candidate_worst_loss(yes_assessment, 10000.0) == 20.0
     assert bot_v2.candidate_worst_loss(no_assessment, 10000.0) == 10.0
+
+
+def test_no_candidate_worst_loss_and_route_use_no_specific_scaling(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.70,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 30.0,
+            "min_size": 1.0,
+        },
+    )
+    monkeypatch.setattr(bot_v2, "NO_KELLY_FRACTION", 1.5, raising=False)
+    monkeypatch.setattr(bot_v2, "KELLY_FRACTION", 0.01)
+
+    yes_assessment = make_assessment(
+        strategy_leg="YES_SNIPER",
+        token_side="yes",
+        size_multiplier=1.0,
+    )
+    no_assessment = make_assessment(
+        strategy_leg="NO_CARRY",
+        token_side="no",
+        size_multiplier=0.5,
+    )
+    market = make_market()
+    risk_state = make_risk_state()
+    router_cfg = load_router_cfg()
+
+    yes_loss = bot_v2.candidate_worst_loss(yes_assessment, 10000.0)
+    no_loss = bot_v2.candidate_worst_loss(no_assessment, 10000.0)
+    decision = bot_v2.route_candidate_assessment(
+        no_assessment, market, risk_state, router_cfg
+    )
+
+    assert yes_loss == 20.0
+    assert no_loss == 22.5
+    assert decision["status"] == "accepted"
+    assert decision["reserved_worst_loss"] == 22.5
 
 
 def test_route_candidate_assessment_normalizes_allowed_candidate_statuses():
