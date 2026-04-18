@@ -1,18 +1,18 @@
 # Strategy Profile 实盘使用手册
 
-## 当前推荐档位：1000
+## 当前默认档位：100
 
-当前提交态 `config.json` 的 `strategy_profile` 是 `1000`，现阶段推荐继续用 `1000` 作为默认实盘档位。
+当前提交态 `config.json` 的 `strategy_profile` 是 `100`，这次默认选择直接对齐 100 刀小资金试跑场景。
 
-原因不是“中间档看起来顺眼”，而是它正好落在当前策略阶段最平衡的位置：
+原因不是“100 档更刺激”，而是这次账户规模已经明确只有 `100`，默认值就应该先保证运行时 merge 后的阈值、风控和挂单节奏与小资金规模一致：
 
-- 资金规模是 `1000.0`，够让单笔挂单、单市场容量和候选覆盖面有实用意义，但还没有大到必须把每个 cap 都收得很死。
-- `kelly_fraction = 0.22`、`no_kelly_fraction = 1.5`，比 `100` 档明显收敛，不会因为小资金心态把 YES/NO 仓位打得过猛；又比 `10000` 档更愿意出手，不会过度保守到大量候选都被自己挡掉。
-- YES 侧 `max_price = 0.05`、NO 侧 `min_price = 0.78` / `max_ask = 0.95`，既保留低价 YES 窄温区猎杀，也保留高价 NO 稳赚小利，两条腿都还能正常工作。
-- 风控上 `global_usage_cap_pct = 0.85`、`per_market_cap_pct = 0.08`、`per_city_cap_pct = 0.18`，已经开始限制单市场和单城市集中，但还没紧到像 `10000` 档那样经常先碰容量上限。
-- 订单与 paper execution 也更接近当前项目节奏：`GTC/GTD` 组合不变，但 `gtd_buffer_hours = 6.0`、`max_order_hours_open = 72.0`、`submission_latency_ms = 3500`、`cancel_latency_ms = 3000` 都比 `100` 档更有耐心，又没有 `10000` 档那么慢和苛刻。
+- 资金规模直接落到 `balance = 100.0`，不会再出现“默认还是 1000 档，但实际只想按 100 刀观察行为”的错位。
+- YES 侧改回更宽的小资金试跑阈值：`max_price = 0.08`、`min_probability = 0.005`，更容易看到低价窄温区票进入候选池。
+- NO 侧也回到更宽版本：`min_price = 0.72`、`max_ask = 0.97`、`min_probability = 0.82`，便于观察高价 NO 在小资金条件下的覆盖面。
+- 风控与容量 cap 同步放宽到 `global_usage_cap_pct = 0.92`、`per_market_cap_pct = 0.15`，让小账户更快触碰到“一个市场/事件能吃掉多少资金”的真实边界。
+- 订单等待也更短：`gtd_buffer_hours = 4.0`、`max_order_hours_open = 36.0`、`cancel_latency_ms = 2000`，更符合小资金先看节奏、快速观察挂单行为的目标。
 
-一句话判断：**`1000` 是当前“还能持续成交、又不会把风险和执行压力放大到失控”的默认档位。**
+一句话判断：**当前默认先用 `100`，目标不是追求最平衡，而是让小资金运行结果和配置语义完全一致。**
 
 ## 三档真实参数差异
 
@@ -35,7 +35,7 @@
 
 适合场景：你还在验证自己会不会持续按规则执行，账户小，主要目标是快速建立样本和操作手感，而不是追求绝对稳健。
 
-### 1000：当前默认档，最平衡
+### 1000：中档平衡档
 
 - YES 开始收敛到更便宜的位置：`max_price 0.05`。
 - NO 开始要求更确定：`min_price 0.78`、`min_probability 0.88`。
@@ -89,7 +89,7 @@
 
 ```json
 {
-  "strategy_profile": "1000"
+  "strategy_profile": "100"
 }
 ```
 
@@ -102,32 +102,33 @@
 
 所以，**正常切换时只改 `strategy_profile`，不要手工把顶层 `yes_strategy`、`no_strategy`、`risk_router` 改成半套新档位。**
 
-## 切换后立即检查项
+## 切到 100 后观察 bot 行为的检查清单
 
-切换完不要直接跑，先确认：
+切到 `100` 后不要只盯着“有没有单子”，先按下面清单看行为是不是和小资金 preset 一致：
 
-1. `strategy_profile` 字段已经是目标值，例如 `1000`。
-2. 你理解当前运行会使用该 profile 深度 merge 后的结果，而不是只看顶层已有默认值。
-3. 不要只改单个顶层字段，例如只把顶层 `balance` 改成 `10000`，却忘了 profile 里的 YES/NO 阈值、cap、order policy、paper execution 仍应该整体切换。
-4. 如果你确实需要自定义某个档位，应该改对应的 `strategy_profiles[profile_name]` 内容，而不是造成“顶层一套、profile 一套”的错觉。
-5. 切换后重新对照本手册中的关键数字，至少确认 YES 价格阈值、NO 价格/概率阈值、`max_size` 和 `global_usage_cap_pct` 符合预期。
+1. **先验 merge 结果，不要只看顶层默认值。** 至少确认运行时关键值是：`balance = 100.0`、YES `max_price = 0.08`、NO `min_price = 0.72`、`risk_router.global_usage_cap_pct = 0.92`、`order_policy.max_order_hours_open = 36.0`。
+2. **YES 候选应比 1000 档更宽。** 观察 scan 输出时，低价 YES 不该还被卡在 `max_price 0.05` / `min_probability 0.01` 的中档门槛上；如果表现仍像 1000 档，先查 profile 是否没切对。
+3. **NO 候选应更容易进入候选池。** `min_price 0.72`、`max_ask 0.97`、`min_probability 0.82` 意味着更多高价 NO 会通过第一轮过滤；若 NO 仍明显少于预期，优先排查 merge 值而不是直接归因策略失效。
+4. **单市场 / 单事件占用会更快打到小资金上限。** 因为总资金只有 `100.0`，哪怕 `per_market_cap_pct = 0.15`、`per_event_cap_pct = 0.3` 看上去更宽，绝对金额上也会更快感受到占用上限。
+5. **订单等待与取消节奏应更短更快。** 观察 `max_order_hours_open = 36.0`、`gtd_buffer_hours = 4.0`、`cancel_latency_ms = 2000` 这一组值是否让挂单更快进入取消/替换节奏，而不是继续表现成 72 小时慢节奏。
+6. **行为异常先查 profile，再谈策略。** 如果候选、风控、挂单节奏完全不像小资金档，第一步是核对 `strategy_profile = 100` 和 merge 后代表值，而不是马上下结论说策略逻辑坏了。
 
-### 当前默认 `1000` 档的快速核对值
+### 当前默认 `100` 档的快速核对值
 
-如果你现在就是按推荐档位运行，至少应确认这些代表值和 `1000` preset 一致：
+如果你现在按默认配置运行，至少应确认这些代表值和 `100` preset 一致：
 
-- `strategy_profile = 1000`
-- YES：`max_price 0.05`、`min_probability 0.01`、`max_size 18.0`
-- NO：`min_price 0.78`、`max_ask 0.95`、`min_probability 0.88`、`max_size 30.0`
-- `risk_router.global_usage_cap_pct = 0.85`
-- `order_policy.max_order_hours_open = 72.0`
-- `paper_execution.submission_latency_ms = 3500`
+- `strategy_profile = 100`
+- YES：`max_price 0.08`、`min_probability 0.005`、`max_size 25.0`
+- NO：`min_price 0.72`、`max_ask 0.97`、`min_probability 0.82`、`max_size 20.0`
+- `risk_router.global_usage_cap_pct = 0.92`
+- `order_policy.max_order_hours_open = 36.0`
+- `paper_execution.submission_latency_ms = 2500`
 
 如果这些值对不上，先不要继续把结果解释成策略问题，先确认是不是档位没切对，或者你手工改了顶层字段却没同步 profile 本体。
 
 ## 注意事项
 
-- 当前推荐就是 `1000`，不是因为它“折中”，而是因为它最符合这个仓库现在要验证的目标：自动扫描、候选筛选、被动挂单、订单生命周期和持仓管理都要完整跑通，同时不把风险放大到 `100` 那么激进，也不把机会收缩到 `10000` 那么保守。
+- 当前默认已经切到 `100`，因为这次目标不是讨论长期最优档位，而是让 100 刀小资金运行时直接落在对应 preset 上。
 - `100` 更激进，适合小资金试跑；`10000` 更保守，适合容量、集中度和执行质量已经成为第一约束时再上。
 - 如果你在实操里还经常靠主观判断临时改阈值，那先别升级档位；先把执行纪律稳定下来。
 - 如果你切档后感觉“机会变少/变多很多”，先回看是不是配置逻辑生效了，而不是马上下结论说策略坏了。三档本来就故意在 YES/NO 阈值、cap 和执行耐心上拉开差距。
