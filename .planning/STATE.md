@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready
-stopped_at: Completed quick task 260418-s4k
-last_updated: "2026-04-18T11:59:32Z"
-last_activity: 2026-04-18 - Completed quick task 260418-s4k: NO 改为 fair-value anchored passive bid，并统一 assessment→order intent 合同
+stopped_at: Completed quick task 260418-tcf
+last_updated: "2026-04-18T13:24:07Z"
+last_activity: 2026-04-18 - Completed quick task 260418-tcf: 收紧 100 档预算与 NO 阈值，并同步默认档位文档
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-s4k: NO 改为 fair-value anchored passive bid，并统一 assessment→order intent 合同
+Last activity: 2026-04-18 - Completed quick task 260418-tcf: 收紧 100 档预算与 NO 阈值，并同步默认档位文档
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -124,6 +124,7 @@ None yet.
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 260418-tcf | 收紧活跃 100 档预算与 NO 阈值，并同步默认档位文档与 smoke 校验 | 2026-04-18 | 5e2f038, 7604ee8 | Verified | [260418-tcf-yes-no-no-depth-filter](./quick/260418-tcf-yes-no-no-depth-filter/) |
 | 260418-s4k | 把 NO 被动挂单从 bid improve 改成 fair-value anchored passive bid，并统一 assessment→order intent 定价合同 | 2026-04-18 | 0e49aae, 2213174, bd5eeab | Verified | [260418-s4k-no-fair-value-bid](./quick/260418-s4k-no-fair-value-bid/) |
 | 260418-q1n | 把 NO 候选从 taker ask 决策切到 passive maker bid，并补齐 assessment→order intent 回归 | 2026-04-18 | 819bdb2, 0733699 | Verified | [260418-q1n-no-passive-bid](./quick/260418-q1n-no-passive-bid/) |
 | 260418-o5m | 默认 strategy_profile 切到 100，补齐 100 档观察清单并做 merge smoke/status/report 校验 | 2026-04-18 | c3e8af6, 8d0ddfc | Verified | [260418-o5m-strategy-profile-100-bot](./quick/260418-o5m-strategy-profile-100-bot/) |
@@ -144,6 +145,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:59:32Z
-Stopped at: Completed quick task 260418-s4k
+Last session: 2026-04-18T13:24:07Z
+Stopped at: Completed quick task 260418-tcf
 Resume file: None
