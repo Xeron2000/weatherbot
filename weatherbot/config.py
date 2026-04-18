@@ -4,6 +4,19 @@ import os
 from .paths import CONFIG_FILE
 
 
+_STRIPPED_TOP_LEVEL_KEYS = {
+    "no_strategy",
+    "no_kelly_fraction",
+}
+_STRIPPED_RISK_ROUTER_KEYS = {
+    "no_budget_pct",
+    "no_leg_cap_pct",
+}
+_STRIPPED_ORDER_POLICY_KEYS = {
+    "no_time_in_force",
+}
+
+
 def _deep_merge_dicts(base, override):
     if not isinstance(base, dict) or not isinstance(override, dict):
         return override
@@ -15,6 +28,31 @@ def _deep_merge_dicts(base, override):
         else:
             merged[key] = value
     return merged
+
+
+def _drop_removed_runtime_fields(config_dict):
+    cleaned = dict(config_dict)
+
+    for key in _STRIPPED_TOP_LEVEL_KEYS:
+        cleaned.pop(key, None)
+
+    risk_router = cleaned.get("risk_router")
+    if isinstance(risk_router, dict):
+        cleaned["risk_router"] = {
+            key: value
+            for key, value in risk_router.items()
+            if key not in _STRIPPED_RISK_ROUTER_KEYS
+        }
+
+    order_policy = cleaned.get("order_policy")
+    if isinstance(order_policy, dict):
+        cleaned["order_policy"] = {
+            key: value
+            for key, value in order_policy.items()
+            if key not in _STRIPPED_ORDER_POLICY_KEYS
+        }
+
+    return cleaned
 
 
 def load_risk_router_config(config_dict):
@@ -121,6 +159,8 @@ def load_config(config_path=None):
         if not isinstance(profiles, dict) or profile_name not in profiles:
             raise ValueError(f"unknown_strategy_profile:{profile_name}")
         loaded = _deep_merge_dicts(loaded, profiles[profile_name])
+
+    loaded = _drop_removed_runtime_fields(loaded)
 
     env_vc_key = os.environ.get("VISUAL_CROSSING_KEY")
     if env_vc_key is not None:
