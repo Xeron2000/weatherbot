@@ -198,6 +198,44 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
     assert no_assessment["reasons"] == []
 
 
+def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeypatch):
+    configure_strategy_runtime(monkeypatch)
+    assessments = strategy.build_candidate_assessments(
+        [
+            {
+                "market_id": "mkt-65-69",
+                "range": [65.0, 69.0],
+                "aggregate_probability": 0.04,
+                "fair_yes": 0.04,
+                "fair_no": 0.96,
+            }
+        ],
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+                "no": {"bid": 0.01, "ask": 0.95, "spread": 0.94},
+                "execution_stop_reasons": [],
+            }
+        ],
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-17",
+            "metar": 66.0,
+            "now_ts": "2026-04-18T12:00:00+00:00",
+        },
+    )
+
+    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+
+    assert no_assessment["strategy_leg"] == "NO_CARRY"
+    assert no_assessment["status"] == "accepted"
+    assert no_assessment["reasons"] == []
+    assert no_assessment["quote_context"]["bid"] == 0.01
+    assert no_assessment["quote_context"]["ask"] == 0.95
+
+
 def test_no_passive_order_shares_scale_with_reserved_worst_loss_only(monkeypatch):
     configure_strategy_runtime(monkeypatch, no_kelly_fraction=1.5, no_max_size=30.0)
     configure_paper_execution_runtime(monkeypatch)

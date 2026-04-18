@@ -66,7 +66,9 @@ def make_bucket_probability(prob=0.18):
     }
 
 
-def make_quote_snapshot(yes_ask=0.11, no_bid=0.9, execution_stop_reasons=None):
+def make_quote_snapshot(
+    yes_ask=0.11, no_bid=0.9, no_ask=None, execution_stop_reasons=None
+):
     execution_stop_reasons = execution_stop_reasons or []
     return {
         "market_id": "mkt-65-69",
@@ -86,7 +88,7 @@ def make_quote_snapshot(yes_ask=0.11, no_bid=0.9, execution_stop_reasons=None):
             "token_id": "no-65-69",
             "side": "no",
             "bid": no_bid,
-            "ask": round(no_bid + 0.03, 4),
+            "ask": round(no_bid + 0.03, 4) if no_ask is None else no_ask,
             "spread": 0.03,
             "tick_size": 0.01,
             "min_order_size": 5.0,
@@ -168,6 +170,57 @@ def test_no_evaluator_uses_no_strategy_thresholds_only(monkeypatch):
 
     assert result["strategy_leg"] == "NO_CARRY"
     assert result["status"] == "accepted"
+
+
+def test_no_evaluator_uses_no_ask_for_price_floor_and_edge(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.7,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_no_candidate(
+        make_bucket_probability(0.04),
+        make_quote_snapshot(no_bid=0.01, no_ask=0.95),
+        24,
+    )
+
+    assert "price_below_min" not in result["reasons"]
+    assert result["status"] == "accepted"
+    assert result["edge"] == 0.01
+
+
+def test_no_evaluator_reprices_when_no_ask_is_below_min_price(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.7,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_no_candidate(
+        make_bucket_probability(0.04),
+        make_quote_snapshot(no_bid=0.9, no_ask=0.64),
+        24,
+    )
+
+    assert result["status"] == "reprice"
+    assert "price_below_min" in result["reasons"]
 
 
 def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
