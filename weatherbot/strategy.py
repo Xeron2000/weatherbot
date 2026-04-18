@@ -108,7 +108,8 @@ def assess_yes_peak_window_penalty(bucket_probability, market_context=None):
 
     local_now = get_local_now(city_slug, context.get("now_ts"))
     result["local_time"] = local_now.isoformat()
-    if market_date != local_now.strftime("%Y-%m-%d"):
+    market_day = str(market_date).split("T", 1)[0]
+    if market_day != local_now.strftime("%Y-%m-%d"):
         return result
     if local_now.hour < YES_PEAK_WINDOW_END_HOUR:
         return result
