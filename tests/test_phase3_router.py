@@ -71,29 +71,34 @@ def test_config_json_contains_conservative_risk_router_defaults():
     router = config_dict["risk_router"]
 
     assert router["yes_budget_pct"] == 0.30
-    assert router["no_budget_pct"] == 0.70
     assert router["global_usage_cap_pct"] == 0.85
     assert router["per_market_cap_pct"] == 0.08
     assert router["per_city_cap_pct"] == 0.18
     assert router["per_date_cap_pct"] == 0.18
     assert router["per_event_cap_pct"] == 0.18
+    assert "no_budget_pct" not in router
+    assert "no_leg_cap_pct" not in router
 
 
-def test_load_risk_router_config_keeps_independent_leg_budgets():
-    router = load_router_cfg()
-
-    assert router["yes_budget_pct"] == 0.30
-    assert router["no_budget_pct"] == 0.70
-    assert router["yes_leg_cap_pct"] == 0.30
-    assert router["no_leg_cap_pct"] == 0.70
-
-
-def test_config_json_contains_no_specific_sizing_controls():
+def test_config_json_commits_yes_only_strategy_schema():
     with open("config.json", encoding="utf-8") as handle:
         config_dict = json.load(handle)
 
-    assert config_dict["no_kelly_fraction"] == 1.5
-    assert config_dict["no_strategy"]["max_size"] > config_dict["yes_strategy"]["max_size"]
+    assert "no_strategy" not in config_dict
+    assert "no_kelly_fraction" not in config_dict
+    assert "no_time_in_force" not in config_dict["order_policy"]
+
+
+def test_strategy_profiles_commit_yes_only_shared_fields():
+    with open("config.json", encoding="utf-8") as handle:
+        config_dict = json.load(handle)
+
+    for profile in config_dict["strategy_profiles"].values():
+        assert "no_strategy" not in profile
+        assert "no_kelly_fraction" not in profile
+        assert "no_budget_pct" not in profile["risk_router"]
+        assert "no_leg_cap_pct" not in profile["risk_router"]
+        assert "no_time_in_force" not in profile["order_policy"]
 
 
 def test_config_json_commits_all_strategy_profiles_with_expected_risk_ordering():

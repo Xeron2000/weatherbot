@@ -175,11 +175,11 @@ def reload_runtime_modules(monkeypatch, config_path):
 
 
 @pytest.mark.parametrize(
-    ("profile_name", "expected_balance", "expected_yes_max_price", "expected_no_min_probability"),
+    ("profile_name", "expected_balance", "expected_yes_max_price", "expected_global_usage_cap"),
     [
-        ("100", 100.0, 0.08, 0.84),
-        ("1000", 1000.0, 0.05, 0.90),
-        ("10000", 10000.0, 0.02, 0.95),
+        ("100", 100.0, 0.08, 0.92),
+        ("1000", 1000.0, 0.05, 0.80),
+        ("10000", 10000.0, 0.02, 0.72),
     ],
 )
 def test_load_config_merges_selected_strategy_profile(
@@ -188,7 +188,7 @@ def test_load_config_merges_selected_strategy_profile(
     profile_name,
     expected_balance,
     expected_yes_max_price,
-    expected_no_min_probability,
+    expected_global_usage_cap,
 ):
     config_path = tmp_path / "config.json"
     write_profile_config(config_path, strategy_profile=profile_name)
@@ -199,11 +199,15 @@ def test_load_config_merges_selected_strategy_profile(
     assert loaded["balance"] == expected_balance
     assert loaded["yes_strategy"]["max_price"] == expected_yes_max_price
     assert loaded["yes_strategy"]["min_edge"] == 0.05
-    assert loaded["no_strategy"]["min_probability"] == expected_no_min_probability
-    assert loaded["no_strategy"]["max_ask"] == 0.95
+    assert "no_strategy" not in loaded
+    assert "no_kelly_fraction" not in loaded
     assert loaded["risk_router"]["yes_budget_pct"] == 0.25
+    assert loaded["risk_router"]["global_usage_cap_pct"] == expected_global_usage_cap
     assert loaded["paper_execution"]["submission_latency_ms"] == 5000
     assert loaded["order_policy"]["max_order_hours_open"] == 72.0
+    assert "no_budget_pct" not in loaded["risk_router"]
+    assert "no_leg_cap_pct" not in loaded["risk_router"]
+    assert "no_time_in_force" not in loaded["order_policy"]
 
 
 def test_load_config_env_visual_crossing_key_wins_after_profile_merge(monkeypatch, tmp_path):
@@ -215,6 +219,7 @@ def test_load_config_env_visual_crossing_key_wins_after_profile_merge(monkeypatc
 
     assert loaded["balance"] == 100.0
     assert loaded["vc_key"] == "env-key"
+    assert "no_strategy" not in loaded
 
 
 def test_runtime_entrypoints_consume_merged_profile_config(monkeypatch, tmp_path):
@@ -264,6 +269,8 @@ def test_load_config_without_profile_fields_keeps_legacy_behavior(monkeypatch, t
     assert loaded["balance"] == 321.0
     assert loaded["yes_strategy"]["max_price"] == 0.03
     assert "strategy_profile" not in loaded
+    assert "no_strategy" not in loaded
+    assert "no_kelly_fraction" not in loaded
 
 
 def test_load_config_unknown_explicit_profile_raises(monkeypatch, tmp_path):
