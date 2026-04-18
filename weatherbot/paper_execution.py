@@ -59,6 +59,42 @@ def compute_passive_limit_price(side_quote, policy):
         return None, "quote_price_missing"
     return round(candidate, 4), None
 
+def compute_no_anchored_limit_price(side_quote, fair_no, policy):
+    bid = side_quote.get("bid")
+    ask = side_quote.get("ask")
+    tick_size = side_quote.get("tick_size")
+    if tick_size is None:
+        return None, "tick_size_missing"
+    try:
+        tick_size = float(tick_size)
+    except Exception:
+        return None, "tick_size_missing"
+    if tick_size <= 0:
+        return None, "tick_size_missing"
+    if bid is None or ask is None:
+        return None, "quote_price_missing"
+    try:
+        bid = float(bid)
+        ask = float(ask)
+    except Exception:
+        return None, "quote_price_missing"
+    if fair_no is None:
+        return None, "fair_value_missing"
+    try:
+        fair_no = float(fair_no)
+    except Exception:
+        return None, "fair_value_missing"
+
+    anchored_target = fair_no - 0.10
+    candidate = anchored_target
+    if ask > bid:
+        candidate = min(candidate, ask - tick_size)
+    candidate = int(candidate / tick_size) * tick_size
+    candidate = round(candidate, 6)
+    if candidate <= 0:
+        return None, "quote_price_missing"
+    return round(candidate, 4), None
+
 def build_passive_order_intent(market, reservation, assessment, quote_snapshot, now_ts):
     if not reservation:
         return {"order": None, "reason": "reservation_missing"}
@@ -74,7 +110,12 @@ def build_passive_order_intent(market, reservation, assessment, quote_snapshot, 
     side_quote = (quote.get(token_side) if token_side in {"yes", "no"} else None) or {}
     if not side_quote:
         return {"order": None, "reason": "quote_snapshot_missing"}
-    limit_price, reason = compute_passive_limit_price(side_quote, ORDER_POLICY)
+    if token_side == "no":
+        limit_price, reason = compute_no_anchored_limit_price(
+            side_quote, assessment.get("fair_no"), ORDER_POLICY
+        )
+    else:
+        limit_price, reason = compute_passive_limit_price(side_quote, ORDER_POLICY)
     if reason:
         return {"order": None, "reason": reason}
     reserved_worst_loss = float(reservation.get("reserved_worst_loss", 0.0) or 0.0)

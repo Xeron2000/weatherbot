@@ -56,6 +56,8 @@ def make_assessment(
     bid=0.09,
     ask=0.11,
     tick_size=0.01,
+    fair_yes=0.18,
+    fair_no=0.82,
 ):
     return {
         "strategy_leg": strategy_leg,
@@ -63,6 +65,8 @@ def make_assessment(
         "range": bucket_range,
         "status": status,
         "edge": edge,
+        "fair_yes": fair_yes,
+        "fair_no": fair_no,
         "reasons": [],
         "quote_context": {
             "bid": bid,
