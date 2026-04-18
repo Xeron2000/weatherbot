@@ -112,6 +112,51 @@ def test_build_passive_order_intent_has_stable_reasons_and_deterministic_order(m
     assert built["order"]["expires_at"] == "2026-04-18T18:00:00+00:00"
 
 
+def test_yes_assessment_and_order_intent_share_maker_limit_price(monkeypatch):
+    configure_strategy_runtime(monkeypatch)
+    configure_paper_execution_runtime(monkeypatch)
+    assessment = strategy.evaluate_yes_candidate(
+        {
+            "market_id": "mkt-65-69",
+            "range": [65.0, 69.0],
+            "aggregate_probability": 0.28,
+            "fair_yes": 0.28,
+            "fair_no": 0.72,
+        },
+        {
+            "market_id": "mkt-65-69",
+            "yes": {"bid": 0.19, "ask": 0.34, "spread": 0.15, "tick_size": 0.01},
+            "no": {"bid": 0.65, "ask": 0.67, "spread": 0.02, "tick_size": 0.01},
+            "execution_stop_reasons": [],
+        },
+        24,
+    )
+
+    built = paper_execution.build_passive_order_intent(
+        make_market(),
+        {
+            "strategy_leg": "YES_SNIPER",
+            "token_side": "yes",
+            "reserved_worst_loss": 20.0,
+        },
+        assessment,
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"bid": 0.19, "ask": 0.34, "tick_size": 0.01},
+                "no": {"bid": 0.65, "ask": 0.67, "tick_size": 0.01},
+            }
+        ],
+        "2026-04-18T12:00:00+00:00",
+    )
+
+    assert assessment["status"] == "accepted"
+    assert assessment["intent_limit_price"] == 0.2
+    assert assessment["edge"] == 0.08
+    assert built["reason"] is None
+    assert built["order"]["limit_price"] == assessment["intent_limit_price"]
+
+
 def test_build_position_from_order_persists_side_metadata(monkeypatch):
     configure_paper_execution_runtime(monkeypatch)
     market = make_market()

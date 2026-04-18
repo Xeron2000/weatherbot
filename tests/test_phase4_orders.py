@@ -231,6 +231,25 @@ def test_build_passive_order_intent_returns_deterministic_quote_reasons_without_
     assert missing_quote["reason"] == "quote_price_missing"
 
 
+def test_build_passive_order_intent_prefers_shared_assessment_limit_price():
+    market = make_market()
+    reservation = make_reservation()
+    assessment = make_assessment(ask=0.34, edge=0.08, fair_yes=0.28, fair_no=0.72)
+    assessment["intent_limit_price"] = 0.2
+    now_ts = "2026-04-17T12:00:00+00:00"
+
+    built = bot_v2.build_passive_order_intent(
+        market,
+        reservation,
+        assessment,
+        make_quote_snapshot(yes_bid=0.19, yes_ask=0.34),
+        now_ts,
+    )
+
+    assert built["reason"] is None
+    assert built["order"]["limit_price"] == 0.2
+
+
 def test_apply_order_transition_normalizes_statuses_and_appends_history():
     order = {
         "order_id": "ord-1",

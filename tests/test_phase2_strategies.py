@@ -148,6 +148,33 @@ def test_build_candidate_assessments_returns_yes_only_records(monkeypatch):
     assert "price_above_max" in assessments[0]["reasons"]
 
 
+def test_yes_assessment_uses_shared_maker_price_instead_of_live_ask(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_yes_candidate(
+        make_bucket_probability(0.28),
+        make_quote_snapshot(yes_ask=0.34),
+        24,
+    )
+
+    assert result["status"] == "accepted"
+    assert result["intent_limit_price"] == 0.2
+    assert result["edge"] == 0.08
+    assert "price_above_max" not in result["reasons"]
+
+
 def test_yes_peak_window_penalty_uses_city_local_time_not_utc(monkeypatch):
     monkeypatch.setattr(
         bot_v2,
