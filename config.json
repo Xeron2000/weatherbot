@@ -11,17 +11,17 @@
   "max_slippage": 0.03,
   "yes_strategy": {
     "max_price": 0.02,
-    "min_probability": 0.08,
-    "min_edge": 0.03,
+    "min_probability": 0.005,
+    "min_edge": 0.05,
     "min_hours": 2.0,
     "max_hours": 72.0,
-    "max_size": 20.0,
+    "max_size": 200.0,
     "min_size": 1.0
   },
   "no_strategy": {
     "min_price": 0.80,
     "max_ask": 0.95,
-    "min_probability": 0.90,
+    "min_probability": 0.92,
     "min_edge": 0.03,
     "min_hours": 2.0,
     "max_hours": 72.0,
