@@ -96,6 +96,20 @@ def test_config_json_contains_no_specific_sizing_controls():
     assert config_dict["no_strategy"]["max_size"] > config_dict["yes_strategy"]["max_size"]
 
 
+def test_config_json_commits_all_strategy_profiles_with_expected_risk_ordering():
+    with open("config.json", encoding="utf-8") as handle:
+        config_dict = json.load(handle)
+
+    profiles = config_dict["strategy_profiles"]
+
+    assert config_dict["strategy_profile"] in profiles
+    assert set(profiles) == {"100", "1000", "10000"}
+    assert profiles["100"]["risk_router"]["global_usage_cap_pct"] > profiles["1000"]["risk_router"]["global_usage_cap_pct"]
+    assert profiles["1000"]["risk_router"]["global_usage_cap_pct"] > profiles["10000"]["risk_router"]["global_usage_cap_pct"]
+    assert profiles["100"]["yes_strategy"]["max_size"] > profiles["1000"]["yes_strategy"]["max_size"]
+    assert profiles["1000"]["yes_strategy"]["max_size"] > profiles["10000"]["yes_strategy"]["max_size"]
+
+
 def test_route_candidate_assessment_rejects_each_budget_and_cap_reason():
     market = make_market()
     assessment = make_assessment()

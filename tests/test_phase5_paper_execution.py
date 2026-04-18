@@ -102,6 +102,22 @@ def test_load_paper_execution_config_requires_explicit_phase5_fields():
         bot_v2.load_paper_execution_config({"paper_execution": {}})
 
 
+def test_config_json_strategy_profiles_keep_complete_paper_execution_block():
+    config_dict = load_config_dict()
+    profiles = config_dict["strategy_profiles"]
+
+    assert set(profiles) == {"100", "1000", "10000"}
+    assert config_dict["paper_execution"]["submission_latency_ms"] == 5000
+    assert config_dict["paper_execution"]["cancel_latency_ms"] == 4000
+    assert profiles["100"]["paper_execution"]["submission_latency_ms"] == 2500
+    assert profiles["1000"]["paper_execution"]["submission_latency_ms"] == 3500
+    assert profiles["10000"]["paper_execution"]["submission_latency_ms"] == 5000
+    for profile in profiles.values():
+        loaded = bot_v2.load_paper_execution_config(profile)
+        assert loaded["touch_not_fill_min_touches"] >= 1
+        assert loaded["partial_fill_slice_ratio"] > 0
+
+
 def test_submission_latency_keeps_order_in_submitting_state_before_any_fill():
     step = bot_v2.simulate_paper_execution_step(
         make_market(),
