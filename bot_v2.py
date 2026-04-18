@@ -3348,6 +3348,227 @@ def summarize_terminal_order_reasons(markets, limit=10):
     return summary
 
 
+def replay_order_sort_key(entry):
+    order = entry.get("order") or {}
+    return (
+        order.get("updated_at") or order.get("created_at") or "",
+        order.get("order_id") or "",
+    )
+
+
+def collect_replay_orders(markets, market_filter=None, order_filter=None, limit=5):
+    replay_orders = []
+    for market in markets or []:
+        ensure_market_order_defaults(market)
+        orders = []
+        active_order = market.get("active_order")
+        if active_order and active_order.get("order_id"):
+            orders.append(active_order)
+        orders.extend(market.get("order_history", []) or [])
+
+        for order in orders:
+            if market_filter and order.get("market_id") != market_filter:
+                continue
+            if order_filter and order.get("order_id") != order_filter:
+                continue
+            replay_orders.append({"market": market, "order": order})
+
+    replay_orders.sort(key=replay_order_sort_key, reverse=True)
+    if limit is not None:
+        replay_orders = replay_orders[: max(0, int(limit))]
+    return replay_orders
+
+
+def events_for_order(market, order_id):
+    matched = []
+    for event in market.get("execution_events", []) or []:
+        if event.get("order_id") == order_id:
+            matched.append(event)
+    matched.sort(key=lambda item: (item.get("ts") or "", item.get("event_type") or ""))
+    return matched
+
+
+def parse_iso_or_none(ts):
+    if not ts:
+        return None
+    try:
+        return parse_simulation_ts(ts)
+    except Exception:
+        return None
+
+
+def delta_ms(start_ts, end_ts):
+    start_dt = parse_iso_or_none(start_ts)
+    end_dt = parse_iso_or_none(end_ts)
+    if not start_dt or not end_dt:
+        return None
+    return max(0, int((end_dt - start_dt).total_seconds() * 1000))
+
+
+def first_event_by_type(events, event_types):
+    wanted = set(event_types)
+    for event in events or []:
+        if event.get("event_type") in wanted:
+            return event
+    return None
+
+
+def count_adverse_buffer_hits(events, order):
+    limit_price = safe_float((order or {}).get("limit_price"))
+    if limit_price is None:
+        return 0
+    hits = 0
+    for event in events or []:
+        if event.get("event_type") not in {"partial_fill", "filled"}:
+            continue
+        fill_price = safe_float(event.get("simulated_fill_price"))
+        if fill_price is None:
+            continue
+        if fill_price < limit_price:
+            hits += 1
+    return hits
+
+
+def build_replay_fill_quality(order, events, paper_state=None):
+    paper_state = paper_state or {}
+    touch_not_fill_count = sum(
+        1 for event in events or [] if event.get("event_type") == "touch_not_fill"
+    )
+    partial_fill_slices = sum(
+        1 for event in events or [] if event.get("event_type") == "partial_fill"
+    )
+    submission_released = first_event_by_type(events, {"submission_released"})
+    first_fill = first_event_by_type(events, {"partial_fill", "filled"})
+    cancel_requested = first_event_by_type(events, {"cancel_requested"})
+    cancel_confirmed = first_event_by_type(events, {"cancel_confirmed"})
+
+    queue_wait_ms = None
+    if submission_released:
+        queue_end = first_fill or cancel_requested or cancel_confirmed
+        queue_wait_ms = delta_ms(submission_released.get("ts"), (queue_end or {}).get("ts"))
+
+    cancel_delay_ms = None
+    if cancel_requested and cancel_confirmed:
+        cancel_delay_ms = delta_ms(cancel_requested.get("ts"), cancel_confirmed.get("ts"))
+
+    total_shares = round(float((order or {}).get("shares", 0.0) or 0.0), 4)
+    filled_shares = round(float((order or {}).get("filled_shares", 0.0) or 0.0), 4)
+    if filled_shares <= 0 and paper_state.get("order_id") == (order or {}).get("order_id"):
+        filled_shares = round(float(paper_state.get("filled_shares", 0.0) or 0.0), 4)
+    remaining_shares = round(max(0.0, total_shares - filled_shares), 4)
+    adverse_buffer_hits = count_adverse_buffer_hits(events, order)
+
+    tune_hints = []
+    if touch_not_fill_count > 0 or (queue_wait_ms or 0) > 0:
+        tune_hints.append("queue_ahead_shares / touch_not_fill_min_touches")
+    if partial_fill_slices > 0 or (filled_shares > 0 and remaining_shares > 0):
+        tune_hints.append("partial_fill_slice_ratio")
+    if (cancel_delay_ms or 0) > 0:
+        tune_hints.append("cancel_latency_ms")
+    if adverse_buffer_hits > 0:
+        tune_hints.append("adverse_fill_buffer_ticks")
+
+    return {
+        "touch_not_fill_count": touch_not_fill_count,
+        "queue_wait_ms": queue_wait_ms,
+        "partial_fill_slices": partial_fill_slices,
+        "cancel_delay_ms": cancel_delay_ms,
+        "filled_shares": filled_shares,
+        "total_shares": total_shares,
+        "unfilled_shares": remaining_shares,
+        "adverse_buffer_hits": adverse_buffer_hits,
+        "tune_hints": tune_hints,
+    }
+
+
+def format_replay_quality(summary):
+    queue_wait_ms = summary.get("queue_wait_ms")
+    cancel_delay_ms = summary.get("cancel_delay_ms")
+    hints = summary.get("tune_hints") or []
+    return (
+        f"touch_not_fill={summary.get('touch_not_fill_count', 0)} | "
+        f"queue_wait_ms={queue_wait_ms if queue_wait_ms is not None else 'n/a'} | "
+        f"partial_fill_slices={summary.get('partial_fill_slices', 0)} | "
+        f"cancel_delay_ms={cancel_delay_ms if cancel_delay_ms is not None else 'n/a'} | "
+        f"filled_shares={summary.get('filled_shares', 0.0):.4f}/{summary.get('total_shares', 0.0):.4f} | "
+        f"unfilled_shares={summary.get('unfilled_shares', 0.0):.4f} | "
+        f"adverse_buffer_hits={summary.get('adverse_buffer_hits', 0)} | "
+        f"tune_hints={', '.join(hints) if hints else 'none'}"
+    )
+
+
+def format_replay_event_line(event):
+    fill_shares = round(float(event.get("simulated_fill_shares", 0.0) or 0.0), 4)
+    queue_ahead = round(float(event.get("queue_ahead_shares", 0.0) or 0.0), 4)
+    latency_ms = int(event.get("latency_ms", 0) or 0)
+    fill_price = safe_float(event.get("simulated_fill_price"))
+    fill_price_text = f"{fill_price:.4f}" if fill_price is not None else "n/a"
+    cancel_reason = event.get("cancel_reason")
+    cancel_text = f" | cancel_reason={cancel_reason}" if cancel_reason else ""
+    return (
+        f"      {event.get('ts') or 'unknown'} | {event.get('event_type') or 'unknown'} | "
+        f"{event.get('status_before') or 'unknown'}->{event.get('status_after') or 'unknown'} | "
+        f"reason={event.get('reason') or 'unknown'} | fill_shares={fill_shares:.4f} | "
+        f"fill_price={fill_price_text} | queue_ahead={queue_ahead:.4f} | latency_ms={latency_ms}{cancel_text}"
+    )
+
+
+def print_replay(limit=5, market_filter=None, order_filter=None):
+    markets = load_all_markets()
+    replay_orders = collect_replay_orders(
+        markets,
+        market_filter=market_filter,
+        order_filter=order_filter,
+        limit=limit,
+    )
+
+    print("\n  Replay orders")
+    print(
+        "    "
+        f"limit={limit} market_filter={market_filter or 'all'} order_filter={order_filter or 'all'}"
+    )
+
+    if not replay_orders:
+        filters = []
+        if market_filter:
+            filters.append(f"market_id={market_filter}")
+        if order_filter:
+            filters.append(f"order_id={order_filter}")
+        print(
+            "    No replay orders matched"
+            + (f" ({', '.join(filters)})" if filters else ".")
+        )
+        return
+
+    for entry in replay_orders:
+        market = entry.get("market") or {}
+        order = entry.get("order") or {}
+        order_id = order.get("order_id")
+        paper_state = market.get("paper_execution_state") or {}
+        if paper_state.get("order_id") != order_id:
+            paper_state = {}
+        events = events_for_order(market, order_id)
+        quality = build_replay_fill_quality(order, events, paper_state)
+        bucket = format_bucket_label(
+            {"range": order.get("range"), "unit": market.get("unit") or ""}
+        )
+        print(
+            "    "
+            f"{market.get('city_name', market.get('city')):<16} {market.get('date')} | "
+            f"order_id={order_id or 'unknown'} | market_id={order.get('market_id') or 'unknown'} | "
+            f"status={order.get('status') or paper_state.get('status') or 'unknown'} | "
+            f"reason={order.get('status_reason') or paper_state.get('cancel_reason') or paper_state.get('last_reason') or 'unknown'} | "
+            f"bucket={bucket} | updated_at={order.get('updated_at') or order.get('created_at') or paper_state.get('last_event_ts') or 'unknown'}"
+        )
+        print(f"      fill_quality | {format_replay_quality(quality)}")
+        print("      timeline")
+        if not events:
+            print("        none")
+            continue
+        for event in events:
+            print(format_replay_event_line(event))
+
+
 def print_order_summary(state, markets):
     order_state = state.get("order_state") or {}
     status_counts = order_state.get("status_counts") or {}
@@ -3813,5 +4034,48 @@ if __name__ == "__main__":
     elif cmd == "report":
         _cal = load_cal()
         print_report()
+    elif cmd == "replay":
+        limit = 5
+        market_filter = None
+        order_filter = None
+        args = sys.argv[2:]
+        i = 0
+        error = None
+        while i < len(args):
+            arg = args[i]
+            if arg == "--market":
+                if i + 1 >= len(args):
+                    error = "missing value for --market"
+                    break
+                market_filter = args[i + 1]
+                i += 2
+                continue
+            if arg == "--order":
+                if i + 1 >= len(args):
+                    error = "missing value for --order"
+                    break
+                order_filter = args[i + 1]
+                i += 2
+                continue
+            if arg == "--limit":
+                if i + 1 >= len(args):
+                    error = "missing value for --limit"
+                    break
+                try:
+                    limit = max(1, int(args[i + 1]))
+                except Exception:
+                    error = "invalid value for --limit"
+                    break
+                i += 2
+                continue
+            error = f"unknown replay argument: {arg}"
+            break
+
+        if error:
+            print(f"Replay usage error: {error}")
+            print("Usage: python bot_v2.py replay [--market MARKET_ID] [--order ORDER_ID] [--limit N]")
+        else:
+            _cal = load_cal()
+            print_replay(limit=limit, market_filter=market_filter, order_filter=order_filter)
     else:
-        print("Usage: python weatherbet.py [run|status|report]")
+        print("Usage: python weatherbet.py [run|status|report|replay]")

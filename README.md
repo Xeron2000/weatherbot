@@ -203,6 +203,33 @@ Phase 4 adds three persisted order fact sources:
 
 ---
 
+## Phase 5 Verification
+
+Run the Phase 5 paper execution + replay regression suite locally with:
+
+```bash
+uv run pytest tests/test_phase5_paper_execution.py tests/test_phase5_scan_loop.py tests/test_phase5_replay.py -q
+```
+
+Phase 5 replay reads three persisted truth sources directly from local market JSON / state files:
+
+- `execution_events` — append-only submit / touch / queue / partial_fill / filled / cancel timeline for each paper order
+- `paper_execution_state` — latest submission, queue, fill, and cancel latency state for the active replayable order
+- `order_history` — terminal filled / canceled / expired order facts used to select recent orders without rerunning the engine
+
+Use the replay CLI to inspect a recent order or a strict market / order match without rerunning scan logic:
+
+```bash
+python bot_v2.py replay
+python bot_v2.py replay --limit 3
+python bot_v2.py replay --market <market_id>
+python bot_v2.py replay --order <order_id>
+```
+
+The replay output includes operator-facing fill quality evidence — `touch_not_fill`, `queue_wait_ms`, `partial_fill_slices`, `cancel_delay_ms`, filled vs unfilled shares, and `adverse_buffer_hits` — plus tuning hints that map directly back to the conservative paper parameters (`queue_ahead_shares`, `touch_not_fill_min_touches`, `partial_fill_slice_ratio`, `cancel_latency_ms`, `adverse_fill_buffer_ticks`).
+
+---
+
 ## APIs Used
 
 | API | Auth | Purpose |
