@@ -746,6 +746,101 @@ def build_reserved_exposure(market, decision, reserved_at):
         "exposure_keys": dict(decision.get("exposure_keys", {}) or {}),
     }
 
+def position_entry_side(position):
+    return (position or {}).get("token_side") or (position or {}).get("entry_side")
+
+def find_market_quote_entry(market, market_id):
+    return next(
+        (
+            quote
+            for quote in market.get("quote_snapshot", []) or []
+            if quote.get("market_id") == market_id
+        ),
+        None,
+    )
+
+def resolve_position_token_id(market, market_id, side):
+    quote_entry = find_market_quote_entry(market, market_id)
+    token_id = quote_for_side(quote_entry, side).get("token_id")
+    if token_id:
+        return token_id
+
+    token_key = "token_id_yes" if side == "yes" else "token_id_no"
+    for outcome in market.get("all_outcomes", []) or []:
+        if outcome.get("market_id") == market_id:
+            return outcome.get(token_key)
+    return None
+
+def resolve_position_exit_price(market, position, outcomes=None, refresh_live=False):
+    side = position_entry_side(position)
+    market_id = (position or {}).get("market_id")
+    outcome_rows = outcomes if outcomes is not None else market.get("all_outcomes", []) or []
+
+    if side in {"yes", "no"}:
+        token_id = resolve_position_token_id(market, market_id, side)
+        if refresh_live and token_id:
+            quote = get_token_quote_snapshot(token_id, side)
+            if quote.get("book_ok") and quote.get("bid") is not None:
+                return quote["bid"]
+
+        quote_entry = find_market_quote_entry(market, market_id)
+        side_quote = quote_for_side(quote_entry, side)
+        if side_quote.get("bid") is not None:
+            return side_quote.get("bid")
+
+    else:
+        token_id = resolve_position_token_id(market, market_id, "yes")
+        if refresh_live and token_id:
+            quote = get_token_quote_snapshot(token_id, "yes")
+            if quote.get("book_ok") and quote.get("bid") is not None:
+                return quote["bid"]
+
+    for outcome in outcome_rows:
+        if outcome.get("market_id") == market_id:
+            return outcome.get("bid", outcome.get("price"))
+    return None
+
+def evaluate_position_stop_rule(position, current_price):
+    side = position_entry_side(position)
+    entry = float((position or {}).get("entry_price", 0.0) or 0.0)
+
+    if side == "yes":
+        return {
+            "side": side,
+            "legacy": False,
+            "trailing_enabled": False,
+            "stop_triggered": False,
+            "stop_price": None,
+        }
+
+    if side == "no":
+        high_price_stop = entry >= 0.80
+        return {
+            "side": side,
+            "legacy": False,
+            "trailing_enabled": False,
+            "stop_triggered": bool(high_price_stop and current_price is not None and current_price <= 0.70),
+            "stop_price": 0.70 if high_price_stop else None,
+        }
+
+    stop = (position or {}).get("stop_price", entry * 0.80)
+    return {
+        "side": None,
+        "legacy": True,
+        "trailing_enabled": True,
+        "stop_triggered": bool(current_price is not None and current_price <= stop),
+        "stop_price": stop,
+    }
+
+def ensure_position_runtime_defaults(position):
+    if not isinstance(position, dict):
+        return position
+    position.setdefault("pnl", None)
+    position.setdefault("exit_price", None)
+    position.setdefault("close_reason", None)
+    position.setdefault("closed_at", None)
+    return position
+
 def take_forecast_snapshot(city_slug, dates):
     """Fetches forecasts from all sources and returns a snapshot."""
     now_str = datetime.now(timezone.utc).isoformat()
@@ -997,36 +1092,41 @@ def scan_and_update():
 
             # --- STOP-LOSS AND TRAILING STOP ---
             if mkt.get("position") and mkt["position"].get("status") == "open":
-                pos = mkt["position"]
-                current_price = None
-                for o in outcomes:
-                    if o["market_id"] == pos["market_id"]:
-                        current_price = o["price"]
-                        break
-
+                pos = ensure_position_runtime_defaults(mkt["position"])
+                current_price = resolve_position_exit_price(mkt, pos, outcomes=outcomes)
                 if current_price is not None:
-                    current_price = o.get("bid", current_price)  # sell at bid
                     entry = pos["entry_price"]
-                    stop = pos.get("stop_price", entry * 0.80)  # 20% stop by default
+                    stop_state = evaluate_position_stop_rule(pos, current_price)
 
-                    # Trailing: if up 20%+ — move stop to breakeven
-                    if current_price >= entry * 1.20 and stop < entry:
+                    # Trailing: legacy positions only, if up 20%+ — move stop to breakeven
+                    if (
+                        stop_state["trailing_enabled"]
+                        and current_price >= entry * 1.20
+                        and stop_state["stop_price"] < entry
+                    ):
                         pos["stop_price"] = entry
                         pos["trailing_activated"] = True
+                        stop_state = evaluate_position_stop_rule(pos, current_price)
 
                     # Check stop
-                    if current_price <= stop:
+                    if stop_state["stop_triggered"]:
                         pnl = round((current_price - entry) * pos["shares"], 2)
                         balance += pos["cost"] + pnl
                         pos["closed_at"] = snap.get("ts")
                         pos["close_reason"] = (
-                            "stop_loss" if current_price < entry else "trailing_stop"
+                            "trailing_stop"
+                            if stop_state["legacy"] and current_price >= entry
+                            else "stop_loss"
                         )
                         pos["exit_price"] = current_price
                         pos["pnl"] = pnl
                         pos["status"] = "closed"
                         closed += 1
-                        reason = "STOP" if current_price < entry else "TRAILING BE"
+                        reason = (
+                            "TRAILING BE"
+                            if stop_state["legacy"] and current_price >= entry
+                            else "STOP"
+                        )
                         print(
                             f"  [{reason}] {loc['name']} {date} | entry ${entry:.3f} exit ${current_price:.3f} | PnL: {'+' if pnl >= 0 else ''}{pnl:.2f}"
                         )
@@ -1158,41 +1258,14 @@ def monitor_positions():
     closed = 0
 
     for mkt in open_pos:
-        pos = mkt["position"]
-        mid = pos["market_id"]
-
-        current_price = None
-
-        quote_entry = next(
-            (q for q in mkt.get("quote_snapshot", []) if q.get("market_id") == mid),
-            None,
-        )
-        yes_token_id = None
-        if quote_entry:
-            yes_token_id = quote_entry.get("yes", {}).get("token_id")
-        if yes_token_id is None:
-            for o in mkt.get("all_outcomes", []):
-                if o["market_id"] == mid:
-                    yes_token_id = o.get("token_id_yes")
-                    break
-
-        if yes_token_id:
-            quote = get_token_quote_snapshot(yes_token_id, "yes")
-            if quote.get("book_ok") and quote.get("bid") is not None:
-                current_price = quote["bid"]
-
-        # Fallback to cached price if API failed
-        if current_price is None:
-            for o in mkt.get("all_outcomes", []):
-                if o["market_id"] == mid:
-                    current_price = o.get("bid", o["price"])
-                    break
+        pos = ensure_position_runtime_defaults(mkt["position"])
+        current_price = resolve_position_exit_price(mkt, pos, refresh_live=True)
 
         if current_price is None:
             continue
 
         entry = pos["entry_price"]
-        stop = pos.get("stop_price", entry * 0.80)
+        stop_state = evaluate_position_stop_rule(pos, current_price)
         city_name = LOCATIONS.get(mkt["city"], {}).get("name", mkt["city"])
 
         # Hours left to resolution
@@ -1207,10 +1280,15 @@ def monitor_positions():
         else:
             take_profit = 0.75  # 48h+: take profit at $0.75
 
-        # Trailing: if up 20%+ — move stop to breakeven
-        if current_price >= entry * 1.20 and stop < entry:
+        # Trailing: legacy positions only, if up 20%+ — move stop to breakeven
+        if (
+            stop_state["trailing_enabled"]
+            and current_price >= entry * 1.20
+            and stop_state["stop_price"] < entry
+        ):
             pos["stop_price"] = entry
             pos["trailing_activated"] = True
+            stop_state = evaluate_position_stop_rule(pos, current_price)
             print(
                 f"  [TRAILING] {city_name} {mkt['date']} — stop moved to breakeven ${entry:.3f}"
             )
@@ -1218,7 +1296,7 @@ def monitor_positions():
         # Check take-profit
         take_triggered = take_profit is not None and current_price >= take_profit
         # Check stop
-        stop_triggered = current_price <= stop
+        stop_triggered = stop_state["stop_triggered"]
 
         if take_triggered or stop_triggered:
             pnl = round((current_price - entry) * pos["shares"], 2)
@@ -1227,12 +1305,17 @@ def monitor_positions():
             if take_triggered:
                 pos["close_reason"] = "take_profit"
                 reason = "TAKE"
-            elif current_price < entry:
-                pos["close_reason"] = "stop_loss"
-                reason = "STOP"
             else:
-                pos["close_reason"] = "trailing_stop"
-                reason = "TRAILING BE"
+                pos["close_reason"] = (
+                    "trailing_stop"
+                    if stop_state["legacy"] and current_price >= entry
+                    else "stop_loss"
+                )
+                reason = (
+                    "TRAILING BE"
+                    if stop_state["legacy"] and current_price >= entry
+                    else "STOP"
+                )
             pos["exit_price"] = current_price
             pos["pnl"] = pnl
             pos["status"] = "closed"

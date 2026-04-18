@@ -318,7 +318,7 @@ def test_monitor_positions_keeps_yes_position_open_even_below_legacy_stop(
 
     assert closed == 0
     assert updated["position"]["status"] == "open"
-    assert updated["position"]["exit_price"] is None
+    assert updated["position"].get("exit_price") is None
 
 
 def test_monitor_positions_stops_only_large_no_positions_using_no_quote(
