@@ -4,6 +4,19 @@ import os
 from .paths import CONFIG_FILE
 
 
+def _deep_merge_dicts(base, override):
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        return override
+
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load_risk_router_config(config_dict):
     router = {
         "yes_budget_pct": 0.30,
@@ -95,9 +108,20 @@ def load_paper_execution_config(config_dict):
         loaded[key] = value
     return loaded
 
-def load_config(config_path=CONFIG_FILE):
+def load_config(config_path=None):
+    if config_path is None:
+        config_path = CONFIG_FILE
+
     with open(config_path, encoding="utf-8") as handle:
         loaded = json.load(handle)
+
+    profile_name = loaded.get("strategy_profile")
+    if profile_name is not None:
+        profiles = loaded.get("strategy_profiles")
+        if not isinstance(profiles, dict) or profile_name not in profiles:
+            raise ValueError(f"unknown_strategy_profile:{profile_name}")
+        loaded = _deep_merge_dicts(loaded, profiles[profile_name])
+
     env_vc_key = os.environ.get("VISUAL_CROSSING_KEY")
     if env_vc_key is not None:
         loaded["vc_key"] = env_vc_key

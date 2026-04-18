@@ -1,27 +1,28 @@
 {
-  "balance": 10000.0,
+  "balance": 1000.0,
   "min_volume": 500,
   "min_hours": 2.0,
   "max_hours": 72.0,
-  "kelly_fraction": 0.25,
+  "kelly_fraction": 0.22,
   "no_kelly_fraction": 1.5,
   "scan_interval": 900,
   "calibration_min": 30,
   "vc_key": "",
   "max_slippage": 0.03,
+  "strategy_profile": "1000",
   "yes_strategy": {
-    "max_price": 0.02,
-    "min_probability": 0.005,
+    "max_price": 0.05,
+    "min_probability": 0.01,
     "min_edge": 0.05,
     "min_hours": 2.0,
     "max_hours": 72.0,
-    "max_size": 200.0,
+    "max_size": 18.0,
     "min_size": 1.0
   },
   "no_strategy": {
-    "min_price": 0.80,
+    "min_price": 0.78,
     "max_ask": 0.95,
-    "min_probability": 0.92,
+    "min_probability": 0.88,
     "min_edge": 0.03,
     "min_hours": 2.0,
     "max_hours": 72.0,
@@ -55,5 +56,163 @@
     "partial_fill_slice_ratio": 0.5,
     "cancel_latency_ms": 4000,
     "adverse_fill_buffer_ticks": 1
+  },
+  "strategy_profiles": {
+    "100": {
+      "balance": 100.0,
+      "kelly_fraction": 0.35,
+      "no_kelly_fraction": 1.8,
+      "yes_strategy": {
+        "max_price": 0.08,
+        "min_probability": 0.005,
+        "min_edge": 0.04,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 25.0,
+        "min_size": 1.0
+      },
+      "no_strategy": {
+        "min_price": 0.72,
+        "max_ask": 0.97,
+        "min_probability": 0.82,
+        "min_edge": 0.025,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 20.0,
+        "min_size": 1.0
+      },
+      "risk_router": {
+        "yes_budget_pct": 0.4,
+        "no_budget_pct": 0.6,
+        "yes_leg_cap_pct": 0.4,
+        "no_leg_cap_pct": 0.6,
+        "global_usage_cap_pct": 0.92,
+        "per_market_cap_pct": 0.15,
+        "per_city_cap_pct": 0.3,
+        "per_date_cap_pct": 0.3,
+        "per_event_cap_pct": 0.3
+      },
+      "order_policy": {
+        "yes_time_in_force": "GTC",
+        "no_time_in_force": "GTD",
+        "gtd_buffer_hours": 4.0,
+        "price_improve_ticks": 1,
+        "replace_edge_buffer": 0.015,
+        "max_order_hours_open": 36.0
+      },
+      "paper_execution": {
+        "submission_latency_ms": 2500,
+        "queue_ahead_shares": 60.0,
+        "queue_ahead_ratio": 0.2,
+        "touch_not_fill_min_touches": 1,
+        "partial_fill_slice_ratio": 0.6,
+        "cancel_latency_ms": 2000,
+        "adverse_fill_buffer_ticks": 1
+      }
+    },
+    "1000": {
+      "balance": 1000.0,
+      "kelly_fraction": 0.22,
+      "no_kelly_fraction": 1.5,
+      "yes_strategy": {
+        "max_price": 0.05,
+        "min_probability": 0.01,
+        "min_edge": 0.05,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 18.0,
+        "min_size": 1.0
+      },
+      "no_strategy": {
+        "min_price": 0.78,
+        "max_ask": 0.95,
+        "min_probability": 0.88,
+        "min_edge": 0.03,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 30.0,
+        "min_size": 1.0
+      },
+      "risk_router": {
+        "yes_budget_pct": 0.3,
+        "no_budget_pct": 0.7,
+        "yes_leg_cap_pct": 0.3,
+        "no_leg_cap_pct": 0.7,
+        "global_usage_cap_pct": 0.85,
+        "per_market_cap_pct": 0.08,
+        "per_city_cap_pct": 0.18,
+        "per_date_cap_pct": 0.18,
+        "per_event_cap_pct": 0.18
+      },
+      "order_policy": {
+        "yes_time_in_force": "GTC",
+        "no_time_in_force": "GTD",
+        "gtd_buffer_hours": 6.0,
+        "price_improve_ticks": 1,
+        "replace_edge_buffer": 0.02,
+        "max_order_hours_open": 72.0
+      },
+      "paper_execution": {
+        "submission_latency_ms": 3500,
+        "queue_ahead_shares": 70.0,
+        "queue_ahead_ratio": 0.22,
+        "touch_not_fill_min_touches": 1,
+        "partial_fill_slice_ratio": 0.55,
+        "cancel_latency_ms": 3000,
+        "adverse_fill_buffer_ticks": 1
+      }
+    },
+    "10000": {
+      "balance": 10000.0,
+      "kelly_fraction": 0.12,
+      "no_kelly_fraction": 1.2,
+      "yes_strategy": {
+        "max_price": 0.02,
+        "min_probability": 0.015,
+        "min_edge": 0.06,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 12.0,
+        "min_size": 1.0
+      },
+      "no_strategy": {
+        "min_price": 0.84,
+        "max_ask": 0.93,
+        "min_probability": 0.94,
+        "min_edge": 0.04,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 16.0,
+        "min_size": 1.0
+      },
+      "risk_router": {
+        "yes_budget_pct": 0.2,
+        "no_budget_pct": 0.8,
+        "yes_leg_cap_pct": 0.2,
+        "no_leg_cap_pct": 0.8,
+        "global_usage_cap_pct": 0.72,
+        "per_market_cap_pct": 0.04,
+        "per_city_cap_pct": 0.1,
+        "per_date_cap_pct": 0.1,
+        "per_event_cap_pct": 0.1
+      },
+      "order_policy": {
+        "yes_time_in_force": "GTC",
+        "no_time_in_force": "GTD",
+        "gtd_buffer_hours": 8.0,
+        "price_improve_ticks": 1,
+        "replace_edge_buffer": 0.03,
+        "max_order_hours_open": 96.0
+      },
+      "paper_execution": {
+        "submission_latency_ms": 5000,
+        "queue_ahead_shares": 100.0,
+        "queue_ahead_ratio": 0.3,
+        "touch_not_fill_min_touches": 2,
+        "partial_fill_slice_ratio": 0.4,
+        "cancel_latency_ms": 4500,
+        "adverse_fill_buffer_ticks": 1
+      }
+    }
   }
 }
