@@ -28,9 +28,9 @@
 
 ### Simulation & Validation
 
-- [ ] **SIM-01**: 操作者可以在不发送真实订单的前提下运行完整的 paper trading 模式
-- [ ] **SIM-02**: 操作者可以让 paper 模式保守建模下单延迟、排队、部分成交、touch-not-fill 与撤单延迟
-- [ ] **SIM-03**: 操作者可以回放订单和成交事件，用来检验成交假设是否过于乐观
+- [x] **SIM-01**: 操作者可以在不发送真实订单的前提下运行完整的 paper trading 模式
+- [x] **SIM-02**: 操作者可以让 paper 模式保守建模下单延迟、排队、部分成交、touch-not-fill 与撤单延迟
+- [x] **SIM-03**: 操作者可以回放订单和成交事件，用来检验成交假设是否过于乐观
 
 ### Risk Controls
 
@@ -89,9 +89,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ORDR-02 | Phase 4 | Complete |
 | ORDR-03 | Phase 4 | Complete |
 | ORDR-04 | Phase 4 | Complete |
-| SIM-01 | Phase 5 | Pending |
-| SIM-02 | Phase 5 | Pending |
-| SIM-03 | Phase 5 | Pending |
+| SIM-01 | Phase 5 | Complete |
+| SIM-02 | Phase 5 | Complete |
+| SIM-03 | Phase 5 | Complete |
 | RISK-01 | Phase 3 | Complete |
 | RISK-02 | Phase 3 | Complete |
 | RISK-03 | Phase 2 | Complete |
@@ -107,4 +107,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-17*
-*Last updated: 2026-04-17 after roadmap creation*
+*Last updated: 2026-04-18 after Phase 05 completion*

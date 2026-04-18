@@ -12,11 +12,11 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: 市场语义与扫描基线** - 先把天气市场对象、规则映射和停单防线做正确。
-- [ ] **Phase 2: 候选定价与双策略筛选** - 把 band probability 和可执行盘口评估转成可解释候选。
-- [ ] **Phase 3: 资金路由与暴露控制** - 按策略腿和事件暴露把资金分配收口。
-- [ ] **Phase 4: 被动挂单与订单恢复** - 建立限价单生命周期、刷新撤单和重启恢复能力。
-- [ ] **Phase 5: 保守 paper execution 与回放验证** - 用保守仿真验证挂单假设和成交真实性。
+- [x] **Phase 1: 市场语义与扫描基线** - 先把天气市场对象、规则映射和停单防线做正确。
+- [x] **Phase 2: 候选定价与双策略筛选** - 把 band probability 和可执行盘口评估转成可解释候选。
+- [x] **Phase 3: 资金路由与暴露控制** - 按策略腿和事件暴露把资金分配收口。
+- [x] **Phase 4: 被动挂单与订单恢复** - 建立限价单生命周期、刷新撤单和重启恢复能力。
+- [x] **Phase 5: 保守 paper execution 与回放验证** - 用保守仿真验证挂单假设和成交真实性。
 - [ ] **Phase 6: 执行复盘与 readiness 报告** - 提供聚合视图、结构化导出和上线前审计依据。
 
 ## Phase Details
@@ -96,7 +96,12 @@ Plans:
   1. 操作者可以运行完整 paper trading 模式，从候选、挂单、成交到持仓变化都不触发真实下单。
   2. 模拟结果会显式体现下单延迟、排队、部分成交、touch-not-fill 与撤单延迟，而不是把挂单直接视为成交。
   3. 操作者可以回放订单与成交事件，检查仿真成交是否过于乐观，并定位哪些 fill 假设需要调参。
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 05-01-PLAN.md — 建立 paper execution 配置、事件 schema 与纯函数合同
+- [x] 05-02-PLAN.md — 将保守 paper execution 接入 scan loop、monitor 与持久化账本
+- [x] 05-03-PLAN.md — 提供 replay CLI、fill quality 回放与 README 验证说明
 
 ### Phase 6: 执行复盘与 readiness 报告
 **Goal**: 操作者可以从策略腿、城市、日期和市场维度复盘执行质量，并导出进入后续 live readiness 判断所需证据。
@@ -117,8 +122,8 @@ Phases execute in numeric order: 1 → 1.1 → 2 → 2.1 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 市场语义与扫描基线 | 4/4 | Complete | 2026-04-17 |
-| 2. 候选定价与双策略筛选 | 0/TBD | Not started | - |
-| 3. 资金路由与暴露控制 | 0/4 | Planned | - |
-| 4. 被动挂单与订单恢复 | 1/4 | In Progress|  |
-| 5. 保守 paper execution 与回放验证 | 0/TBD | Not started | - |
+| 2. 候选定价与双策略筛选 | 4/4 | Complete | 2026-04-17 |
+| 3. 资金路由与暴露控制 | 4/4 | Complete | 2026-04-17 |
+| 4. 被动挂单与订单恢复 | 5/5 | Complete | 2026-04-17 |
+| 5. 保守 paper execution 与回放验证 | 3/3 | Complete | 2026-04-18 |
 | 6. 执行复盘与 readiness 报告 | 0/TBD | Not started | - |

@@ -16,6 +16,7 @@
 - ✓ 基于 EV、Kelly、价格、流动性和滑点过滤候选交易 — existing
 - ✓ 将市场、仓位、校准和账户状态持久化到本地 JSON — existing
 - ✓ 提供 CLI 状态/报告输出与本地 dashboard 查看结果 — existing
+- ✓ 在不发送真实订单的前提下跑完整 paper trading，并可回放 execution events 校验保守 fill 假设 — validated in Phase 05
 
 ### Active
 
@@ -41,6 +42,11 @@
   - 高价 NO：极端温区在 80–99¢ 区间做高胜率 NO，赚小而稳的价差/结算收益。
 - 项目当前没有测试体系、包管理锁文件或模块化边界，后续路线需要在“快速演进现有代码”和“避免脚本继续失控膨胀”之间平衡。
 - 这个项目首先服务策略操作者本人，不是做通用 SaaS；成功标准是自动扫描 + 自动挂单链路可持续运行，并能在模拟环境里看清策略表现。
+
+## Current State
+
+- Phase 05 complete — bot 已具备保守 paper execution、append-only execution event ledger 和 replay CLI。
+- Next focus: Phase 06 将在这些逐笔执行事实之上补聚合复盘与 readiness 报告。
 
 ## Constraints
 
@@ -77,4 +83,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after initialization*
+*Last updated: 2026-04-18 after Phase 05 completion*
