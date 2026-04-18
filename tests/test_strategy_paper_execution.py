@@ -238,7 +238,7 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
     assert no_assessment["reasons"] == []
 
 
-def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeypatch):
+def test_no_assessment_anchors_to_fair_value_in_wide_spread_market(monkeypatch):
     configure_strategy_runtime(monkeypatch)
     configure_paper_execution_runtime(monkeypatch)
     assessments = strategy.build_candidate_assessments(
@@ -246,16 +246,16 @@ def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeyp
             {
                 "market_id": "mkt-65-69",
                 "range": [65.0, 69.0],
-                "aggregate_probability": 0.04,
-                "fair_yes": 0.04,
-                "fair_no": 0.96,
+                "aggregate_probability": 0.05,
+                "fair_yes": 0.05,
+                "fair_no": 0.95,
             }
         ],
         [
             {
                 "market_id": "mkt-65-69",
                 "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.01, "ask": 0.88, "spread": 0.87, "tick_size": 0.01},
+                "no": {"bid": 0.001, "ask": 0.999, "spread": 0.998, "tick_size": 0.01},
                 "execution_stop_reasons": [],
             }
         ],
@@ -271,10 +271,11 @@ def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeyp
     no_assessment = next(item for item in assessments if item["token_side"] == "no")
 
     assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "reprice"
-    assert no_assessment["reasons"] == ["price_below_min"]
-    assert no_assessment["quote_context"]["bid"] == 0.01
-    assert no_assessment["quote_context"]["ask"] == 0.88
+    assert no_assessment["status"] == "accepted"
+    assert no_assessment["reasons"] == []
+    assert no_assessment["edge"] == 0.1
+    assert no_assessment["quote_context"]["bid"] == 0.001
+    assert no_assessment["quote_context"]["ask"] == 0.999
 
 
 def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch):

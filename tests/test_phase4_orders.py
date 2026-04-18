@@ -209,10 +209,11 @@ def test_no_passive_order_intent_uses_same_maker_price_as_assessment_contract():
         strategy_leg="NO_CARRY",
         token_side="no",
         bucket_range=(70.0, 74.0),
-        bid=0.82,
-        ask=0.85,
+        bid=0.001,
+        ask=0.999,
         tick_size=0.01,
     )
+    no_assessment["fair_no"] = 0.95
     market["candidate_assessments"][1] = no_assessment
     market["market_contracts"].append({"market_id": "mkt-70-74", "range": (70.0, 74.0)})
     quote_snapshot = make_quote_snapshot()
@@ -220,7 +221,7 @@ def test_no_passive_order_intent_uses_same_maker_price_as_assessment_contract():
         {
             "market_id": "mkt-70-74",
             "yes": {"bid": 0.05, "ask": 0.07, "tick_size": 0.01, "min_order_size": 1.0},
-            "no": {"bid": 0.82, "ask": 0.85, "tick_size": 0.01, "min_order_size": 1.0},
+            "no": {"bid": 0.001, "ask": 0.999, "tick_size": 0.01, "min_order_size": 1.0},
             "execution_ok": True,
             "execution_stop_reasons": [],
         }
@@ -235,7 +236,7 @@ def test_no_passive_order_intent_uses_same_maker_price_as_assessment_contract():
     )
 
     assert built["reason"] is None
-    assert built["order"]["limit_price"] == 0.83
+    assert built["order"]["limit_price"] == 0.85
     assert built["order"]["time_in_force"] == "GTD"
 
 
