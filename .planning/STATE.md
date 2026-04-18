@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready
 stopped_at: Completed 05-VERIFICATION.md
-last_updated: "2026-04-18T08:17:17Z"
-last_activity: 2026-04-18 - Completed quick task 260418-mbm: 为 NO 大资金持仓增加止损，YES 不加止损
+last_updated: "2026-04-18T08:52:15Z"
+last_activity: 2026-04-18 - Completed quick task 260418-n5y: 增加 100/1000/10000 三档 strategy profile 并保持 env-first 配置语义
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-mbm: 为 NO 大资金持仓增加止损，YES 不加止损
+Last activity: 2026-04-18 - Completed quick task 260418-n5y: 增加 100/1000/10000 三档 strategy profile 并保持 env-first 配置语义
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -124,6 +124,7 @@ None yet.
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 260418-n5y | 增加 100 / 1000 / 10000 三档 strategy profile，保持 env-first 配置语义与入口兼容 | 2026-04-18 | ac0763d | Verified | [260418-n5y-100-1000-10000](./quick/260418-n5y-100-1000-10000/) |
 | 260418-ehf | 把无用的代码文件和旧代码死代码清理掉，然后把bot文件拆分成模块化 | 2026-04-18 | 73777e5 | Verified | [260418-ehf-bot](./quick/260418-ehf-bot/) |
 | 260418-f5r | 为模块化后的 weatherbot 补充 coverage 门槛与关键测试，保证测试覆盖率 | 2026-04-18 | 7a50149 | Verified | [260418-f5r-weatherbot-coverage](./quick/260418-f5r-weatherbot-coverage/) |
 | 260418-g48 | 为 weatherbot 增加峰值窗口过滤器，减少下午后高温桶 YES 假信号 | 2026-04-18 | 0336807 | Verified | [260418-g48-weatherbot-yes](./quick/260418-g48-weatherbot-yes/) |
