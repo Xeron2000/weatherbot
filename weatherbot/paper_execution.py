@@ -982,7 +982,7 @@ def route_market_candidates(
         else market.get("reserved_exposure")
     )
 
-    for leg in ["YES_SNIPER", "NO_CARRY"]:
+    for leg in ["YES_SNIPER"]:
         leg_assessments = []
         for assessment in assessments:
             if assessment.get("strategy_leg") != leg:

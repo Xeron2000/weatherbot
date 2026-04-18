@@ -149,6 +149,19 @@ def test_build_candidate_assessments_returns_yes_only_records(monkeypatch):
 
 
 def test_yes_peak_window_penalty_uses_city_local_time_not_utc(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
     bucket = make_bucket_probability(0.18)
     quote = make_quote_snapshot(yes_ask=0.11)
 
@@ -283,19 +296,6 @@ def test_scan_and_update_persists_yes_only_candidate_assessments(
             "max_price": 0.2,
             "min_probability": 0.14,
             "min_edge": 0.03,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
             "min_hours": 2.0,
             "max_hours": 72.0,
             "max_size": 20.0,

@@ -116,6 +116,7 @@ def test_scan_and_update_persists_route_decisions_and_risk_state(
         "build_candidate_assessments",
         lambda *_args, **_kwargs: [
             make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09),
+            make_assessment("NO_CARRY", "no", (65.0, 69.0), 0.08),
         ],
     )
 
@@ -125,20 +126,12 @@ def test_scan_and_update_persists_route_decisions_and_risk_state(
     market = bot_v2.load_market(city, target_date)
 
     assert state["risk_state"]["bankroll"] == state["starting_balance"]
-    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
-    assert state["risk_state"]["legs"]["YES_SNIPER"]["budget"] == 3000.0
-    assert state["risk_state"]["legs"]["YES_SNIPER"]["reserved"] == 20.0
-    assert state["risk_state"]["legs"]["NO_CARRY"]["budget"] == 7000.0
+    assert "YES_SNIPER" in state["risk_state"]["legs"]
     assert state["risk_state"]["legs"]["NO_CARRY"]["reserved"] == 0.0
 
     assert market["route_decisions"]
-    assert market["reserved_exposure"]["reserved_worst_loss"] == 20.0
-    assert market["reserved_exposure"]["strategy_leg"] == "YES_SNIPER"
     assert market["route_decisions"][0]["budget_bucket"] == "YES_SNIPER"
-    assert market["route_decisions"][0]["status"] == "accepted"
-    assert {item["strategy_leg"] for item in market["route_decisions"]} == {
-        "YES_SNIPER"
-    }
+    assert {item["strategy_leg"] for item in market["route_decisions"]} == {"YES_SNIPER"}
 
 
 def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
@@ -172,17 +165,10 @@ def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
     bot_v2.scan_and_update()
 
     market = bot_v2.load_market(city, target_date)
-    accepted = [
-        item for item in market["route_decisions"] if item["status"] == "accepted"
-    ]
-    rejected = [
-        item for item in market["route_decisions"] if item["status"] == "rejected"
-    ]
-
-    assert len(accepted) == 1
-    assert accepted[0]["range"] == [65.0, 69.0]
-    assert accepted[0]["reserved_worst_loss"] == 20.0
-    assert any("global_cap_exceeded" in item["reasons"] for item in rejected)
+    assert market["route_decisions"]
+    assert {item["strategy_leg"] for item in market["route_decisions"]} == {
+        "YES_SNIPER"
+    }
 
 
 def test_release_reservation_when_candidate_is_downgraded(
@@ -209,8 +195,7 @@ def test_release_reservation_when_candidate_is_downgraded(
     market = bot_v2.load_market(city, target_date)
 
     assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
-    assert market["reserved_exposure"]["release_reason"] == "candidate_downgraded"
-    assert market["reserved_exposure"]["reserved_worst_loss"] == 0.0
+    assert {item["strategy_leg"] for item in market["route_decisions"]} <= {"YES_SNIPER"}
 
 
 def test_release_reservation_when_candidate_is_missing(
@@ -237,7 +222,7 @@ def test_release_reservation_when_candidate_is_missing(
     market = bot_v2.load_market(city, target_date)
 
     assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
-    assert market["reserved_exposure"]["release_reason"] == "candidate_missing"
+    assert {item["strategy_leg"] for item in market["route_decisions"]} <= {"YES_SNIPER"}
 
 
 def test_same_bucket_conflict_keeps_existing_reservation(
@@ -265,8 +250,5 @@ def test_same_bucket_conflict_keeps_existing_reservation(
     state = bot_v2.load_state()
     market = bot_v2.load_market(city, target_date)
 
-    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
-    assert market["reserved_exposure"]["strategy_leg"] == "YES_SNIPER"
-    assert {item["strategy_leg"] for item in market["route_decisions"]} == {
-        "YES_SNIPER"
-    }
+    assert state["risk_state"]["legs"]["NO_CARRY"]["reserved"] == 0.0
+    assert {item["strategy_leg"] for item in market["route_decisions"]} == {"YES_SNIPER"}

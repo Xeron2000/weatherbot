@@ -373,8 +373,7 @@ def build_candidate_assessments(
     for bucket in bucket_probabilities or []:
         quote = quote_by_market.get(bucket.get("market_id"), {})
         yes_candidate = evaluate_yes_candidate(bucket, quote, hours, market_context)
-        no_candidate = evaluate_no_candidate(bucket, quote, hours)
-        assessments.extend([yes_candidate, no_candidate])
+        assessments.append(yes_candidate)
     return assessments
 
 def missing_strategy_fields(strategy_cfg, required_fields):
@@ -725,6 +724,8 @@ def restore_risk_state_from_markets(state, markets, router_cfg):
         if not reservation:
             continue
         if reservation.get("release_reason"):
+            continue
+        if reservation.get("strategy_leg") != "YES_SNIPER":
             continue
         restored = dict(reservation)
         restored.setdefault(
