@@ -165,7 +165,9 @@ def test_no_evaluator_uses_no_strategy_thresholds_only(monkeypatch):
     )
 
     result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.18), make_quote_snapshot(no_bid=0.9), 24
+        make_bucket_probability(0.18),
+        make_quote_snapshot(no_bid=0.9, no_ask=0.74),
+        24,
     )
 
     assert result["strategy_leg"] == "NO_CARRY"
@@ -189,13 +191,13 @@ def test_no_evaluator_uses_no_ask_for_price_floor_and_edge(monkeypatch):
 
     result = bot_v2.evaluate_no_candidate(
         make_bucket_probability(0.04),
-        make_quote_snapshot(no_bid=0.01, no_ask=0.95),
+        make_quote_snapshot(no_bid=0.01, no_ask=0.88),
         24,
     )
 
     assert "price_below_min" not in result["reasons"]
     assert result["status"] == "accepted"
-    assert result["edge"] == 0.01
+    assert result["edge"] == 0.08
 
 
 def test_no_evaluator_reprices_when_no_ask_is_below_min_price(monkeypatch):
@@ -252,7 +254,7 @@ def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
     )
 
     bucket = make_bucket_probability(0.18)
-    quote = make_quote_snapshot(yes_ask=0.2, no_bid=0.9)
+    quote = make_quote_snapshot(yes_ask=0.2, no_bid=0.9, no_ask=0.74)
 
     yes_result = bot_v2.evaluate_yes_candidate(bucket, quote, 24)
     no_result = bot_v2.evaluate_no_candidate(bucket, quote, 24)
@@ -372,7 +374,7 @@ def test_yes_peak_window_penalty_does_not_touch_no_candidate(monkeypatch):
     )
 
     bucket = make_bucket_probability(0.18)
-    quote = make_quote_snapshot(yes_ask=0.11, no_bid=0.9)
+    quote = make_quote_snapshot(yes_ask=0.11, no_bid=0.9, no_ask=0.74)
     market_context = {
         "city_slug": "nyc",
         "market_date": "2026-04-18",

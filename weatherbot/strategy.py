@@ -294,7 +294,7 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
     reasons = []
     quote = quote_for_side(quote_snapshot, "no")
     fair_price = bucket_probability.get("fair_no")
-    bid = quote.get("bid")
+    ask = quote.get("ask")
     reasons.extend(
         missing_strategy_fields(
             NO_STRATEGY,
@@ -314,14 +314,14 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
         reasons.append("outside_strategy_window")
     if quote_snapshot and quote_snapshot.get("execution_stop_reasons"):
         reasons.extend(quote_snapshot.get("execution_stop_reasons", []))
-    if bid is None:
+    if ask is None:
         reasons.append("missing_quote_price")
-    if bid is not None and bid < NO_STRATEGY.get("min_price", 0.0):
+    if ask is not None and ask < NO_STRATEGY.get("min_price", 0.0):
         reasons.append("price_below_min")
     if bucket_probability.get("fair_no", 0.0) < NO_STRATEGY.get("min_probability", 0.0):
         reasons.append("probability_below_min")
 
-    edge = round((bid or 0.0) - (fair_price or 0.0), 6) if bid is not None else None
+    edge = round((fair_price or 0.0) - (ask or 0.0), 6) if ask is not None else None
     if edge is None:
         status = "rejected"
         size_multiplier = 0.0
