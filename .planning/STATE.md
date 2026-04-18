@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready
 stopped_at: Completed 05-VERIFICATION.md
-last_updated: "2026-04-18T03:47:58Z"
-last_activity: 2026-04-18 - Completed quick task 260418-g48: 为 weatherbot 增加峰值窗口过滤器，减少下午后高温桶 YES 假信号
+last_updated: "2026-04-18T04:07:59Z"
+last_activity: 2026-04-18 - Completed quick task 260418-gk9: 为 weatherbot 增加 NO 专用 kelly fraction 与更大的 NO max_size，提升高确定性 NO 腿仓位
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-g48: 为 weatherbot 增加峰值窗口过滤器，减少下午后高温桶 YES 假信号
+Last activity: 2026-04-18 - Completed quick task 260418-gk9: 为 weatherbot 增加 NO 专用 kelly fraction 与更大的 NO max_size，提升高确定性 NO 腿仓位
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -127,6 +127,7 @@ None yet.
 | 260418-ehf | 把无用的代码文件和旧代码死代码清理掉，然后把bot文件拆分成模块化 | 2026-04-18 | 73777e5 | Verified | [260418-ehf-bot](./quick/260418-ehf-bot/) |
 | 260418-f5r | 为模块化后的 weatherbot 补充 coverage 门槛与关键测试，保证测试覆盖率 | 2026-04-18 | 7a50149 | Verified | [260418-f5r-weatherbot-coverage](./quick/260418-f5r-weatherbot-coverage/) |
 | 260418-g48 | 为 weatherbot 增加峰值窗口过滤器，减少下午后高温桶 YES 假信号 | 2026-04-18 | 0336807 | Verified | [260418-g48-weatherbot-yes](./quick/260418-g48-weatherbot-yes/) |
+| 260418-gk9 | 为 weatherbot 增加 NO 专用 kelly fraction 与更大的 NO max_size，提升高确定性 NO 腿仓位 | 2026-04-18 | 5b620b5 | Verified | [260418-gk9-weatherbot-no-kelly-fraction-no-max-size](./quick/260418-gk9-weatherbot-no-kelly-fraction-no-max-size/) |
 
 ## Session Continuity
 
