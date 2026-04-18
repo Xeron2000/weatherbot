@@ -165,7 +165,34 @@ def test_yes_assessment_uses_shared_maker_price_instead_of_live_ask(monkeypatch)
 
     result = bot_v2.evaluate_yes_candidate(
         make_bucket_probability(0.28),
-        make_quote_snapshot(yes_ask=0.34),
+        {
+            "market_id": "mkt-65-69",
+            "range": (65.0, 69.0),
+            "yes": {
+                "token_id": "yes-65-69",
+                "side": "yes",
+                "bid": 0.19,
+                "ask": 0.34,
+                "spread": 0.15,
+                "tick_size": 0.01,
+                "min_order_size": 5.0,
+                "book_ok": True,
+                "reason_codes": [],
+            },
+            "no": {
+                "token_id": "no-65-69",
+                "side": "no",
+                "bid": 0.63,
+                "ask": 0.66,
+                "spread": 0.03,
+                "tick_size": 0.01,
+                "min_order_size": 5.0,
+                "book_ok": True,
+                "reason_codes": [],
+            },
+            "execution_ok": True,
+            "execution_stop_reasons": [],
+        },
         24,
     )
 

@@ -239,7 +239,7 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
     quote_snapshot = [
         {
             "market_id": "mkt-65-69",
-            "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+            "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02, "tick_size": 0.01},
             "no": {"bid": 0.72, "ask": 0.74, "spread": 0.02, "tick_size": 0.01},
             "execution_stop_reasons": [],
         }

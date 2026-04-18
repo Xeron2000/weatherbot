@@ -229,7 +229,10 @@ def evaluate_yes_candidate(
         raw_probability * peak_window_penalty.get("penalty_factor", 1.0), 6
     )
     fair_price = adjusted_probability
-    ask = quote.get("ask")
+    intent_limit_price, _ = paper_execution.compute_passive_limit_price(
+        quote,
+        paper_execution.ORDER_POLICY,
+    )
     reasons.extend(
         missing_strategy_fields(
             YES_STRATEGY,
@@ -249,16 +252,20 @@ def evaluate_yes_candidate(
         reasons.append("outside_strategy_window")
     if quote_snapshot and quote_snapshot.get("execution_stop_reasons"):
         reasons.extend(quote_snapshot.get("execution_stop_reasons", []))
-    if ask is None:
+    if intent_limit_price is None:
         reasons.append("missing_quote_price")
-    if ask is not None and ask > YES_STRATEGY.get("max_price", 1.0):
+    if intent_limit_price is not None and intent_limit_price > YES_STRATEGY.get("max_price", 1.0):
         reasons.append("price_above_max")
     if peak_window_penalty.get("applied") and peak_window_penalty.get("reason"):
         reasons.append(peak_window_penalty["reason"])
     if adjusted_probability < YES_STRATEGY.get("min_probability", 0.0):
         reasons.append("probability_below_min")
 
-    edge = round((fair_price or 0.0) - (ask or 0.0), 6) if ask is not None else None
+    edge = (
+        round((fair_price or 0.0) - intent_limit_price, 6)
+        if intent_limit_price is not None
+        else None
+    )
     if edge is None:
         status = "rejected"
         size_multiplier = 0.0
@@ -283,6 +290,7 @@ def evaluate_yes_candidate(
         "fair_yes": fair_price,
         "fair_no": bucket_probability.get("fair_no"),
         "quote_context": quote,
+        "intent_limit_price": intent_limit_price,
         "status": status,
         "reasons": normalize_skip_reasons(reasons),
         "size_multiplier": size_multiplier,

@@ -122,7 +122,15 @@ def build_passive_order_intent(market, reservation, assessment, quote_snapshot, 
             side_quote, assessment.get("fair_no"), ORDER_POLICY
         )
     else:
-        limit_price, reason = compute_passive_limit_price(side_quote, ORDER_POLICY)
+        limit_price = assessment.get("intent_limit_price")
+        reason = None
+        if limit_price is not None:
+            try:
+                limit_price = round(float(limit_price), 4)
+            except Exception:
+                limit_price = None
+        if limit_price is None:
+            limit_price, reason = compute_passive_limit_price(side_quote, ORDER_POLICY)
     if reason:
         return {"order": None, "reason": reason}
     reserved_worst_loss = float(reservation.get("reserved_worst_loss", 0.0) or 0.0)
