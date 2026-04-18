@@ -2,7 +2,7 @@
 
 当前主入口仍然是 `bot_v2.py`，但主体实现已经拆到 `weatherbot/` 包里。
 
-目标不变：扫描 Polymarket 天气温度市场，基于多源天气数据做模拟交易、被动挂单、订单生命周期管理和回放分析。
+目标不变：扫描 Polymarket 天气温度市场，基于多源天气数据做 **YES-only** 模拟交易、被动挂单、订单生命周期管理和回放分析。
 
 ## 运行方式
 
@@ -50,17 +50,17 @@ uv sync
 
 - 资金档位选择：`strategy_profile`（可选 `100` / `1000` / `10000`）
 - 顶层资金与扫描参数：`balance`、`min_volume`、`min_hours`、`max_hours`、`scan_interval`
-- 策略块：`yes_strategy`、`no_strategy`
+- 策略块：`yes_strategy`
 - 风控块：`risk_router`
 - 订单策略：`order_policy`
 - Paper execution：`paper_execution`
 - 结算温度拉取：`vc_key`
 
-提交态 `config.json` 已经内置三档可运行预设，当前默认档位是 `100`：
+提交态 `config.json` 已经内置三档 **YES-only** 可运行预设，当前默认档位是 `100`：
 
-- `100`：当前默认档，YES 是主力腿，`yes_budget_pct 0.65` / `no_budget_pct 0.35`，NO 只保留更稀有且更挑剔的机会，核心过滤是 `0.80 / 0.90 / 0.95 / 0.05`
-- `1000`：中间档，YES/NO 更平衡，预算为 `0.3 / 0.7`
-- `10000`：更保守，更低 kelly、更紧 cap 和更严格阈值
+- `100`：当前默认档，小资金观察用；YES 入场更宽、挂单等待更短，适合先把 YES-only 链路跑顺
+- `1000`：中间档；YES 过滤、风险占用和等待节奏更均衡
+- `10000`：更保守；YES 更便宜、cap 更紧、等待更耐心
 
 切换方式只需要改一个字段：
 
@@ -72,7 +72,9 @@ uv sync
 
 运行时会先按所选 profile 深度 merge 出最终配置，然后 `weatherbot` / `bot_v2` 入口直接消费这份 merge 后结果；如果旧配置没有 `strategy_profile` / `strategy_profiles` 字段，则继续按原来的顶层配置运行。
 
-当前默认 `100` 档的直觉应该是：YES 继续负责主力样本，NO 退回高确定性稀有机会腿；这次没有引入 depth filter，只是把 100 档预算和 NO 阈值收紧到当前提交态真实值。
+当前默认 `100` 档的直觉应该是：优先让更多低价 YES 样本进入观察和挂单流程，同时保持更快的取消/替换节奏，方便小资金先验证 YES-only 执行链路。
+
+历史说明：仓库早期文档曾讨论过 NO 腿 / `no_strategy`，但该路径已移除；当前提交态与运行时只支持 YES-only 活跃语义。
 
 Visual Crossing key 现在走**环境变量优先**：运行时会先读取 `VISUAL_CROSSING_KEY`，只有未设置该环境变量时才回退到 `config.json` 里的 `vc_key`。
 
@@ -143,4 +145,4 @@ uv run python bot_v2.py status
 
 ## Disclaimer
 
-这不是投资建议。先在模拟模式下完整验证，再考虑任何真实资金行为。
+这不是投资建议。当前仓库只提供 YES-only 模拟执行与回放语义；先在模拟模式下完整验证，再考虑任何真实资金行为。
