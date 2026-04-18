@@ -3,179 +3,97 @@ from datetime import datetime, timedelta, timezone
 import bot_v2
 
 
-def configure_runtime_paths(tmp_path, monkeypatch):
-    data_dir = tmp_path / "data"
-    markets_dir = data_dir / "markets"
-    data_dir.mkdir()
-    markets_dir.mkdir()
-    monkeypatch.setattr(bot_v2, "DATA_DIR", data_dir)
-    monkeypatch.setattr(bot_v2, "MARKETS_DIR", markets_dir)
-    monkeypatch.setattr(bot_v2, "STATE_FILE", data_dir / "state.json")
-    monkeypatch.setattr(bot_v2, "CALIBRATION_FILE", data_dir / "calibration.json")
-
-
-def make_assessment(
-    strategy_leg="YES_SNIPER",
-    token_side="yes",
-    bucket_range=(65.0, 69.0),
-    edge=0.09,
-    status="accepted",
-):
-    return {
-        "strategy_leg": strategy_leg,
-        "token_side": token_side,
-        "range": bucket_range,
-        "status": status,
-        "edge": edge,
-        "size_multiplier": 1.0,
-        "reasons": [],
-        "quote_context": {
-            "bid": 0.09 if token_side == "yes" else 0.81,
-            "ask": 0.11 if token_side == "yes" else 0.83,
-            "bid_size": 40.0,
-            "ask_size": 35.0,
-            "tick_size": 0.01,
-            "book_ok": True,
-        },
-    }
-
-
-def make_quote_snapshot(
-    market_id="mkt-65-69",
-    yes_bid=0.09,
-    yes_ask=0.11,
-    yes_ask_size=500.0,
-    no_bid=0.81,
-    no_ask=0.83,
-    no_ask_size=500.0,
-):
-    return [
-        {
-            "market_id": market_id,
-            "question": "Between 65-69F",
-            "range": (65.0, 69.0),
-            "yes": {
-                "bid": yes_bid,
-                "ask": yes_ask,
-                "bid_size": 500.0,
-                "ask_size": yes_ask_size,
-                "tick_size": 0.01,
-                "min_order_size": 1.0,
-                "spread": round(yes_ask - yes_bid, 4),
-            },
-            "no": {
-                "bid": no_bid,
-                "ask": no_ask,
-                "bid_size": 500.0,
-                "ask_size": no_ask_size,
-                "tick_size": 0.01,
-                "min_order_size": 1.0,
-                "spread": round(no_ask - no_bid, 4),
-            },
-            "execution_ok": True,
-            "execution_stop_reasons": [],
-        }
-    ]
-
-
-def patch_scan_inputs(monkeypatch, city, event, snapshot_sequence):
-    monkeypatch.setattr(bot_v2.time, "sleep", lambda *_args, **_kwargs: None)
-    calls = {"snapshot": 0}
-    target_dt = datetime.strptime(event["target_date"], "%Y-%m-%d")
-
-    def fake_take_forecast_snapshot(city_slug, dates):
-        idx = min(calls["snapshot"], len(snapshot_sequence) - 1)
-        calls["snapshot"] += 1
-        snap = snapshot_sequence[idx]
-        return {
-            date: {"ts": None, "best": None, "best_source": None} for date in dates
-        } | {event["target_date"]: snap}
-
-    def fake_get_polymarket_event(city_slug, month, day, year):
-        if city_slug != city:
-            return None
-        if (
-            year != target_dt.year
-            or month != bot_v2.MONTHS[target_dt.month - 1]
-            or day != target_dt.day
-        ):
-            return None
-        return event["payload"]
-
-    monkeypatch.setattr(bot_v2, "take_forecast_snapshot", fake_take_forecast_snapshot)
-    monkeypatch.setattr(bot_v2, "get_polymarket_event", fake_get_polymarket_event)
-    monkeypatch.setattr(bot_v2, "LOCATIONS", {city: bot_v2.LOCATIONS[city]})
-
-
-def prepare_single_market(monkeypatch, phase2_gamma_event, phase2_weather_snapshot):
-    city = "nyc"
-    today = datetime.now(timezone.utc)
-    target_date = today.strftime("%Y-%m-%d")
-    month = bot_v2.MONTHS[today.month - 1]
-    event = dict(phase2_gamma_event)
-    event["endDate"] = f"{target_date}T23:59:00Z"
-    event["rules"] = (
-        "This market resolves based on the highest temperature recorded at "
-        "LaGuardia Airport (KLGA) in °F. Temperatures are rounded to the nearest "
-        "whole degree using the official airport reading."
-    )
-    market_with_target = dict(event["markets"][2])
-    market_with_target["question"] = "Between 65-69F"
-    market_with_target["clobTokenIds"] = '["yes-65-69","no-65-69"]'
-    market_with_target["outcomePrices"] = "[0.10,0.90]"
-    event["markets"] = [market_with_target]
-    return (
-        city,
-        month,
-        {
-            "target_date": target_date,
-            "payload": event,
-            "default_snapshot": {
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "ecmwf": phase2_weather_snapshot["sources"]["ecmwf"],
-                "hrrr": phase2_weather_snapshot["sources"]["hrrr"],
-                "metar": phase2_weather_snapshot["sources"]["metar_anchor"],
-                "best": phase2_weather_snapshot["sources"]["ecmwf"],
-                "best_source": "ecmwf",
-            },
-        },
-    )
-
-
-def patch_probability_and_candidates(monkeypatch, assessment_sequence, quote_sequence):
-    monkeypatch.setattr(
-        bot_v2,
-        "aggregate_probability",
-        lambda *_args, **_kwargs: [
+def make_yes_market():
+    market = {
+        "city": "nyc",
+        "date": "2026-04-18",
+        "city_name": "New York City",
+        "event_id": "evt-nyc-2026-04-18",
+        "event_slug": "evt-nyc-2026-04-18",
+        "market_contracts": [
             {
                 "market_id": "mkt-65-69",
                 "question": "Between 65-69F",
-                "range": (65.0, 69.0),
+                "range": [65.0, 69.0],
+            }
+        ],
+        "candidate_assessments": [
+            {
+                "strategy_leg": "YES_SNIPER",
+                "token_side": "yes",
+                "range": [65.0, 69.0],
+                "status": "accepted",
+                "edge": 0.09,
+                "size_multiplier": 1.0,
                 "aggregate_probability": 0.22,
                 "fair_yes": 0.22,
                 "fair_no": 0.78,
-                "volume": 2000,
-                "price": 0.10,
+                "fair_price": 0.22,
+                "reasons": [],
+                "quote_context": {"bid": 0.09, "ask": 0.11, "tick_size": 0.01},
             }
         ],
-    )
-    counters = {"assessment": 0, "quote": 0}
+        "route_decisions": [
+            {
+                "strategy_leg": "YES_SNIPER",
+                "token_side": "yes",
+                "range": [65.0, 69.0],
+                "status": "accepted",
+                "reserved_worst_loss": 20.0,
+                "budget_bucket": "YES_SNIPER",
+                "reasons": [],
+            }
+        ],
+        "reserved_exposure": {
+            "strategy_leg": "YES_SNIPER",
+            "token_side": "yes",
+            "range": [65.0, 69.0],
+            "reserved_worst_loss": 20.0,
+            "release_reason": None,
+            "budget_bucket": "YES_SNIPER",
+        },
+        "quote_snapshot": [
+            {
+                "market_id": "mkt-65-69",
+                "question": "Between 65-69F",
+                "range": [65.0, 69.0],
+                "yes": {
+                    "bid": 0.09,
+                    "ask": 0.11,
+                    "bid_size": 500.0,
+                    "ask_size": 500.0,
+                    "tick_size": 0.01,
+                    "min_order_size": 1.0,
+                    "spread": 0.02,
+                },
+                "no": {
+                    "bid": 0.81,
+                    "ask": 0.83,
+                    "bid_size": 500.0,
+                    "ask_size": 500.0,
+                    "tick_size": 0.01,
+                    "min_order_size": 1.0,
+                    "spread": 0.02,
+                },
+                "execution_ok": True,
+                "execution_stop_reasons": [],
+            }
+        ],
+        "position": None,
+        "active_order": None,
+        "order_history": [],
+        "paper_execution_state": bot_v2.build_empty_paper_execution_state(),
+        "execution_events": [],
+        "execution_metrics": {},
+    }
+    return bot_v2.ensure_market_order_defaults(market)
 
-    def fake_assessments(*_args, **_kwargs):
-        idx = min(counters["assessment"], len(assessment_sequence) - 1)
-        counters["assessment"] += 1
-        return assessment_sequence[idx]
 
-    def fake_quotes(*_args, **_kwargs):
-        idx = min(counters["quote"], len(quote_sequence) - 1)
-        counters["quote"] += 1
-        return quote_sequence[idx]
-
-    monkeypatch.setattr(bot_v2, "build_candidate_assessments", fake_assessments)
-    monkeypatch.setattr(bot_v2, "build_quote_snapshot", fake_quotes)
+def make_risk_state():
+    return bot_v2.build_empty_risk_state(10000.0, bot_v2.RISK_ROUTER)
 
 
-def configure_phase5_runtime(monkeypatch):
+def configure_paper_runtime(monkeypatch):
     monkeypatch.setattr(
         bot_v2,
         "PAPER_EXECUTION",
@@ -191,329 +109,153 @@ def configure_phase5_runtime(monkeypatch):
     )
 
 
-def freeze_bot_now(monkeypatch, ts):
-    frozen = datetime.fromisoformat(ts)
+def test_sync_market_order_creates_yes_active_order(monkeypatch):
+    configure_paper_runtime(monkeypatch)
+    market = make_yes_market()
+    risk_state = make_risk_state()
 
-    class FrozenDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz is None:
-                return frozen
-            return frozen.astimezone(tz)
-
-    monkeypatch.setattr(bot_v2, "datetime", FrozenDateTime)
-
-
-def test_scan_and_update_creates_active_order_before_position_opens(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    patch_scan_inputs(monkeypatch, city, event, [event["default_snapshot"]])
-    patch_probability_and_candidates(
-        monkeypatch,
-        [[make_assessment()]],
-        [make_quote_snapshot(yes_bid=0.09, yes_ask=0.11, yes_ask_size=500.0)],
+    result = bot_v2.sync_market_order(
+        market,
+        risk_state,
+        {"ts": "2026-04-18T12:00:00+00:00", "best": 67.0, "best_source": "ecmwf"},
+        market_ready=True,
     )
 
-    bot_v2.scan_and_update()
-
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["position"] is None
+    assert result == {"filled_cost": 0.0, "opened_position": False}
     assert market["active_order"] is not None
+    assert market["active_order"]["strategy_leg"] == "YES_SNIPER"
+    assert market["active_order"]["token_side"] == "yes"
     assert market["active_order"]["status"] == "working"
-    assert [item["status"] for item in market["active_order"]["history"]] == [
-        "planned",
-        "working",
+    assert market["paper_execution_state"]["status"] == "submitting"
+
+
+def test_sync_market_order_cancels_non_yes_active_order(monkeypatch):
+    configure_paper_runtime(monkeypatch)
+    market = make_yes_market()
+    market["candidate_assessments"] = [
+        {
+            **market["candidate_assessments"][0],
+            "strategy_leg": "NO_CARRY",
+            "token_side": "no",
+        }
     ]
-    assert market["paper_execution_state"]["status"] == "submitting"
-    assert market["order_history"] == []
-
-
-def test_scan_and_update_tracks_partial_and_filled_orders_into_position(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    patch_scan_inputs(
-        monkeypatch,
-        city,
-        event,
-        [
-            event["default_snapshot"],
-            event["default_snapshot"],
-            event["default_snapshot"],
-        ],
-    )
-    patch_probability_and_candidates(
-        monkeypatch,
-        [[make_assessment()], [make_assessment()], [make_assessment()]],
-        [
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11, yes_ask_size=500.0),
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.10, yes_ask_size=120.0),
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.10, yes_ask_size=500.0),
-        ],
-    )
-
-    bot_v2.scan_and_update()
-    bot_v2.scan_and_update()
-
-    partial_market = bot_v2.load_market(city, event["target_date"])
-    assert partial_market["active_order"]["status"] == "working"
-    assert partial_market["paper_execution_state"]["status"] == "submitting"
-    assert partial_market["paper_execution_state"]["queue_ahead_shares"] == 80.0
-    assert partial_market["reserved_exposure"]["reserved_worst_loss"] == 20.0
-
-
-def test_scan_and_update_cancels_on_candidate_downgrade_and_releases_reservation(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    configure_phase5_runtime(monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
-    patch_scan_inputs(
-        monkeypatch,
-        city,
-        event,
-        [
-            event["default_snapshot"],
-            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=6)).isoformat()},
-        ],
-    )
-    patch_probability_and_candidates(
-        monkeypatch,
-        [[make_assessment()], [make_assessment(status="rejected", edge=0.01)]],
-        [
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11),
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11),
-        ],
-    )
-
-    bot_v2.scan_and_update()
-    bot_v2.scan_and_update()
-
-    state = bot_v2.load_state()
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["active_order"] is not None
-    assert market["paper_execution_state"]["status"] == "cancel_pending"
-    assert market["reserved_exposure"]["release_reason"] is None
-    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
-
-    market_for_monitor = bot_v2.load_market(city, event["target_date"])
-    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.09, yes_ask=0.11)
-    bot_v2.save_market(market_for_monitor)
-    monkeypatch.setattr(
-        bot_v2,
-        "refresh_active_order_quotes",
-        lambda mkt: mkt.get("quote_snapshot", []),
-    )
-    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
-
-    bot_v2.monitor_active_orders()
-
-    state = bot_v2.load_state()
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["active_order"] is None
-    assert market["order_history"][-1]["status"] == "canceled"
-    assert market["order_history"][-1]["status_reason"] == "candidate_downgraded"
-    assert market["reserved_exposure"]["release_reason"] == "candidate_downgraded"
-    assert market["reserved_exposure"]["reserved_worst_loss"] == 0.0
-    assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
-
-
-def test_scan_and_update_refreshes_single_active_order_when_quote_reprices(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    configure_phase5_runtime(monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
-    patch_scan_inputs(
-        monkeypatch,
-        city,
-        event,
-        [
-            event["default_snapshot"],
-            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=1)).isoformat()},
-            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=12)).isoformat()},
-        ],
-    )
-    patch_probability_and_candidates(
-        monkeypatch,
-        [[make_assessment()], [make_assessment()]],
-        [
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11),
-            make_quote_snapshot(yes_bid=0.12, yes_ask=0.14),
-        ],
-    )
-
-    bot_v2.scan_and_update()
-    first_market = bot_v2.load_market(city, event["target_date"])
-    first_order_id = first_market["active_order"]["order_id"]
-
-    bot_v2.scan_and_update()
-
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["active_order"] is not None
-    assert market["active_order"]["order_id"] == first_order_id
-    assert market["paper_execution_state"]["status"] == "cancel_pending"
-
-    market_for_monitor = bot_v2.load_market(city, event["target_date"])
-    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.12, yes_ask=0.14)
-    bot_v2.save_market(market_for_monitor)
-    monkeypatch.setattr(
-        bot_v2,
-        "refresh_active_order_quotes",
-        lambda mkt: mkt.get("quote_snapshot", []),
-    )
-    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
-
-    bot_v2.monitor_active_orders()
-    bot_v2.scan_and_update()
-
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["active_order"] is not None
-    assert market["active_order"]["status"] == "working"
-    assert market["paper_execution_state"]["status"] == "submitting"
-    assert market["order_history"][-1]["status"] == "canceled"
-    assert market["order_history"][-1]["status_reason"] == "quote_repriced"
-    assert market["reserved_exposure"]["reserved_worst_loss"] == 20.0
-
-
-def test_scan_and_update_cancels_when_market_is_no_longer_ready(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    configure_phase5_runtime(monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
-    stale_snapshot = {
-        "ts": (base_ts + timedelta(seconds=6)).isoformat(),
-        "ecmwf": None,
-        "hrrr": None,
-        "metar": None,
-        "best": None,
-        "best_source": None,
+    market["route_decisions"] = [
+        {
+            **market["route_decisions"][0],
+            "strategy_leg": "NO_CARRY",
+            "token_side": "no",
+        }
+    ]
+    market["reserved_exposure"] = {
+        **market["reserved_exposure"],
+        "strategy_leg": "NO_CARRY",
+        "token_side": "no",
     }
-    patch_scan_inputs(
-        monkeypatch,
-        city,
-        event,
-        [event["default_snapshot"], stale_snapshot],
+    market["active_order"] = {
+        "order_id": "mkt-65-69:NO_CARRY:no:65.0-69.0:0.8100",
+        "strategy_leg": "NO_CARRY",
+        "token_side": "no",
+        "market_id": "mkt-65-69",
+        "range": [65.0, 69.0],
+        "limit_price": 0.81,
+        "shares": 20.0,
+        "filled_shares": 0.0,
+        "remaining_shares": 20.0,
+        "time_in_force": "GTC",
+        "expires_at": None,
+        "status": "working",
+        "status_reason": "order_submitted",
+        "created_at": "2026-04-18T12:00:00+00:00",
+        "updated_at": "2026-04-18T12:00:00+00:00",
+        "history": [],
+    }
+    market["paper_execution_state"] = {
+        **bot_v2.build_empty_paper_execution_state(),
+        "order_id": market["active_order"]["order_id"],
+        "status": "cancel_pending",
+        "cancel_reason": "yes_only_runtime",
+        "cancel_ready_at": "2026-04-18T12:00:00+00:00",
+    }
+    risk_state = make_risk_state()
+    bot_v2.apply_reservation_to_risk_state(risk_state, market["reserved_exposure"])
+
+    result = bot_v2.sync_market_order(
+        market,
+        risk_state,
+        {"ts": "2026-04-18T12:00:01+00:00", "best": 67.0, "best_source": "ecmwf"},
+        market_ready=True,
     )
-    patch_probability_and_candidates(
-        monkeypatch,
-        [[make_assessment()], [make_assessment()]],
-        [
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11),
-            make_quote_snapshot(yes_bid=0.09, yes_ask=0.11),
-        ],
-    )
 
-    bot_v2.scan_and_update()
-    bot_v2.scan_and_update()
-
-    state = bot_v2.load_state()
-    market = bot_v2.load_market(city, event["target_date"])
-
-    assert market["active_order"] is not None
-    assert market["paper_execution_state"]["status"] == "cancel_pending"
-    assert market["reserved_exposure"]["release_reason"] is None
-    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
-
-    market_for_monitor = bot_v2.load_market(city, event["target_date"])
-    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.09, yes_ask=0.11)
-    bot_v2.save_market(market_for_monitor)
-    monkeypatch.setattr(
-        bot_v2,
-        "refresh_active_order_quotes",
-        lambda mkt: mkt.get("quote_snapshot", []),
-    )
-    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
-
-    bot_v2.monitor_active_orders()
-
-    state = bot_v2.load_state()
-    market = bot_v2.load_market(city, event["target_date"])
-
+    assert result == {"filled_cost": 0.0, "opened_position": False}
     assert market["active_order"] is None
     assert market["order_history"][-1]["status"] == "canceled"
-    assert market["order_history"][-1]["status_reason"] == "market_no_longer_ready"
-    assert market["reserved_exposure"]["release_reason"] == "market_no_longer_ready"
-    assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
+    assert market["order_history"][-1]["status_reason"] == "yes_only_runtime"
+    assert market["reserved_exposure"]["release_reason"] == "yes_only_runtime"
 
 
-def test_scan_and_update_expires_yes_orders(
-    phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
-):
-    configure_runtime_paths(tmp_path, monkeypatch)
-    city, _month, event = prepare_single_market(
-        monkeypatch, phase2_gamma_event, phase2_weather_snapshot
-    )
-    patch_scan_inputs(
-        monkeypatch,
-        city,
-        event,
-        [event["default_snapshot"], event["default_snapshot"]],
-    )
-    patch_probability_and_candidates(
-        monkeypatch,
-        [
-            [make_assessment()],
-            [make_assessment()],
-        ],
-        [
-            [make_quote_snapshot()],
-            [make_quote_snapshot()],
-        ],
-    )
-    monkeypatch.setattr(
-        bot_v2,
-        "aggregate_probability",
-        lambda *_args, **_kwargs: [
-            {
-                "market_id": "mkt-65-69",
-                "question": "Between 65-69F",
-                "range": (65.0, 69.0),
-                "aggregate_probability": 0.20,
-                "fair_yes": 0.20,
-                "fair_no": 0.80,
-                "volume": 2000,
-                "price": 0.81,
-            }
-        ],
+def test_sync_market_order_expires_yes_order(monkeypatch):
+    configure_paper_runtime(monkeypatch)
+    market = make_yes_market()
+    market["active_order"] = {
+        "order_id": "mkt-65-69:YES_SNIPER:yes:65.0-69.0:0.1000",
+        "strategy_leg": "YES_SNIPER",
+        "token_side": "yes",
+        "market_id": "mkt-65-69",
+        "range": [65.0, 69.0],
+        "limit_price": 0.10,
+        "shares": 200.0,
+        "filled_shares": 0.0,
+        "remaining_shares": 200.0,
+        "time_in_force": "GTD",
+        "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        "status": "working",
+        "status_reason": "order_submitted",
+        "created_at": "2026-04-18T12:00:00+00:00",
+        "updated_at": "2026-04-18T12:00:00+00:00",
+        "history": [],
+    }
+    risk_state = make_risk_state()
+    bot_v2.apply_reservation_to_risk_state(risk_state, market["reserved_exposure"])
+
+    result = bot_v2.sync_market_order(
+        market,
+        risk_state,
+        {"ts": datetime.now(timezone.utc).isoformat(), "best": 67.0, "best_source": "ecmwf"},
+        market_ready=True,
     )
 
-    bot_v2.scan_and_update()
-    market = bot_v2.load_market(city, event["target_date"])
-    market["active_order"]["expires_at"] = (
-        datetime.now(timezone.utc) - timedelta(minutes=1)
-    ).isoformat()
-    bot_v2.save_market(market)
-
-    bot_v2.scan_and_update()
-
-    state = bot_v2.load_state()
-    market = bot_v2.load_market(city, event["target_date"])
-
+    assert result == {"filled_cost": 0.0, "opened_position": False}
     assert market["active_order"] is None
     assert market["order_history"][-1]["status"] == "expired"
-    assert market["order_history"][-1]["status_reason"] == "expired"
     assert market["reserved_exposure"]["release_reason"] == "expired"
-    assert state["risk_state"]["global_reserved_worst_loss"] == 0.0
+
+
+def test_restore_order_state_from_markets_ignores_non_yes_active_orders():
+    yes_market = make_yes_market()
+    yes_market["active_order"] = {
+        "order_id": "yes-active",
+        "strategy_leg": "YES_SNIPER",
+        "token_side": "yes",
+        "market_id": "mkt-65-69",
+        "range": [65.0, 69.0],
+        "status": "working",
+        "filled_shares": 0.0,
+        "remaining_shares": 200.0,
+        "updated_at": "2026-04-18T12:00:00+00:00",
+    }
+    no_market = make_yes_market()
+    no_market["active_order"] = {
+        "order_id": "no-active",
+        "strategy_leg": "NO_CARRY",
+        "token_side": "no",
+        "market_id": "mkt-65-69",
+        "range": [65.0, 69.0],
+        "status": "working",
+        "filled_shares": 0.0,
+        "remaining_shares": 20.0,
+        "updated_at": "2026-04-18T12:00:00+00:00",
+    }
+
+    restored = bot_v2.restore_order_state_from_markets([yes_market, no_market])
+
+    assert [item["order_id"] for item in restored["active_orders"]] == ["yes-active"]

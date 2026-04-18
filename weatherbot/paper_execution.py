@@ -100,6 +100,13 @@ def build_passive_order_intent(market, reservation, assessment, quote_snapshot, 
         return {"order": None, "reason": "reservation_missing"}
     if not assessment or assessment.get("status") != "accepted":
         return {"order": None, "reason": "route_not_accepted"}
+    if (
+        reservation.get("strategy_leg") != "YES_SNIPER"
+        or reservation.get("token_side") != "yes"
+        or assessment.get("strategy_leg") != "YES_SNIPER"
+        or assessment.get("token_side") != "yes"
+    ):
+        return {"order": None, "reason": "yes_only_runtime"}
     market_id = resolve_market_id_for_range(market, assessment)
     if not market_id:
         return {"order": None, "reason": "market_contract_missing"}
@@ -599,9 +606,17 @@ def restore_order_state_from_markets(markets):
         active_order = market.get("active_order")
         if active_order:
             status = active_order.get("status")
-            if status in status_counts:
+            if (
+                active_order.get("strategy_leg") == "YES_SNIPER"
+                and active_order.get("token_side") == "yes"
+                and status in status_counts
+            ):
                 status_counts[status] += 1
-            if is_order_unfinished(active_order):
+            if (
+                active_order.get("strategy_leg") == "YES_SNIPER"
+                and active_order.get("token_side") == "yes"
+                and is_order_unfinished(active_order)
+            ):
                 active_orders.append(build_order_restore_entry(market, active_order))
 
         for order in market.get("order_history", []) or []:
@@ -718,6 +733,7 @@ def maybe_release_order_reservation(market, risk_state, reason, ts):
         "market_no_longer_ready",
         "expired",
         "route_not_accepted",
+        "yes_only_runtime",
     }:
         return
     reservation = market.get("reserved_exposure")
@@ -845,8 +861,19 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     assessment = find_assessment_for_reservation(market)
     route = find_route_for_reservation(market)
 
+    yes_only_ready = True
+    for fact in [reservation, assessment, active_order]:
+        if not fact:
+            continue
+        if fact.get("strategy_leg") != "YES_SNIPER" or fact.get("token_side") != "yes":
+            yes_only_ready = False
+            break
+
     if active_order and reservation and reservation.get("release_reason"):
         cancel_reason = reservation.get("release_reason")
+
+    if not yes_only_ready:
+        cancel_reason = cancel_reason or "yes_only_runtime"
 
     if active_order and not reservation:
         cancel_reason = "candidate_missing"
@@ -861,6 +888,8 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
         cancel_reason = cancel_reason or "route_not_accepted"
 
     if (not reservation or not assessment) and not active_order:
+        if cancel_reason:
+            maybe_release_order_reservation(market, risk_state, cancel_reason, ts)
         return {"filled_cost": 0.0, "opened_position": False}
 
     active_order = market.get("active_order")
