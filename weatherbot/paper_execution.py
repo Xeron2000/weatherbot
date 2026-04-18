@@ -1,5 +1,12 @@
 from datetime import datetime, timezone, timedelta
 
+from .config import load_config, load_order_policy_config
+
+
+_cfg = load_config()
+
+ORDER_POLICY = load_order_policy_config(_cfg)
+
 
 def find_assessment_for_reservation(market):
     reservation = market.get("reserved_exposure")
@@ -1018,4 +1025,3 @@ def reconcile_market_reservation(market, risk_state, router_cfg, reserved_at=Non
         kept_reservation=kept_reservation,
         initial_decisions=decisions,
     )
-

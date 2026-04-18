@@ -6,6 +6,42 @@ import requests
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
+from .config import load_config
+from .domain import TIMEZONES
+from .polymarket import normalize_skip_reasons, quote_for_side
+
+
+_cfg = load_config()
+
+MIN_HOURS = _cfg.get("min_hours", 2.0)
+MAX_HOURS = _cfg.get("max_hours", 72.0)
+KELLY_FRACTION = _cfg.get("kelly_fraction", 0.25)
+MAX_BET = _cfg.get("max_bet", 20.0)
+YES_STRATEGY = _cfg.get(
+    "yes_strategy",
+    {
+        "max_price": 0.25,
+        "min_probability": 0.14,
+        "min_edge": 0.03,
+        "min_hours": MIN_HOURS,
+        "max_hours": MAX_HOURS,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    },
+)
+NO_STRATEGY = _cfg.get(
+    "no_strategy",
+    {
+        "min_price": 0.65,
+        "min_probability": 0.70,
+        "min_edge": 0.04,
+        "min_hours": MIN_HOURS,
+        "max_hours": MAX_HOURS,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    },
+)
+
 
 YES_PEAK_WINDOW_END_HOUR = 15
 YES_PEAK_WINDOW_NEAR_BUFFER = 1.0
@@ -1310,4 +1346,3 @@ def run_loop():
             save_state(load_state())
             print(f"  Done. Bye!")
             break
-

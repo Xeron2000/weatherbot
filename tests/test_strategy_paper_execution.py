@@ -1,49 +1,46 @@
 import pytest
 
+import weatherbot
+
 from weatherbot import paper_execution, strategy
 
 
 def configure_strategy_runtime(monkeypatch):
-    monkeypatch.setattr(
-        strategy,
-        "YES_STRATEGY",
-        {
-            "max_price": 0.25,
-            "min_probability": 0.14,
-            "min_edge": 0.03,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-    monkeypatch.setattr(
-        strategy,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
+    yes_strategy = {
+        "max_price": 0.25,
+        "min_probability": 0.14,
+        "min_edge": 0.03,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    }
+    no_strategy = {
+        "min_price": 0.65,
+        "min_probability": 0.7,
+        "min_edge": 0.04,
+        "min_hours": 2.0,
+        "max_hours": 72.0,
+        "max_size": 20.0,
+        "min_size": 1.0,
+    }
+    monkeypatch.setattr(strategy, "YES_STRATEGY", yes_strategy)
+    monkeypatch.setattr(strategy, "NO_STRATEGY", no_strategy)
     monkeypatch.setattr(strategy, "TIMEZONES", {"nyc": "UTC"})
+    monkeypatch.setattr(weatherbot, "YES_STRATEGY", yes_strategy)
+    monkeypatch.setattr(weatherbot, "NO_STRATEGY", no_strategy)
+    monkeypatch.setattr(weatherbot, "TIMEZONES", {"nyc": "UTC"})
 
 
 def configure_paper_execution_runtime(monkeypatch):
-    monkeypatch.setattr(
-        paper_execution,
-        "ORDER_POLICY",
-        {
-            "price_improve_ticks": 1,
-            "yes_time_in_force": "GTD",
-            "no_time_in_force": "GTC",
-            "gtd_buffer_hours": 6.0,
-        },
-    )
+    order_policy = {
+        "price_improve_ticks": 1,
+        "yes_time_in_force": "GTD",
+        "no_time_in_force": "GTC",
+        "gtd_buffer_hours": 6.0,
+    }
+    monkeypatch.setattr(paper_execution, "ORDER_POLICY", order_policy)
+    monkeypatch.setattr(weatherbot, "ORDER_POLICY", order_policy)
 
 
 def make_market():
