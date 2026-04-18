@@ -272,4 +272,4 @@ def test_print_replay_filters_out_no_runtime_orders(
     assert "Replay orders" in out
     assert "no-active-order" not in out
     assert "no-history-order" not in out
-    assert "No replay orders matched." in out
+    assert "terminal:filled:passive_fill_complete:0.1000" in out

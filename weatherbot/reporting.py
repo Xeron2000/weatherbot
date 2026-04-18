@@ -237,6 +237,13 @@ def replay_order_sort_key(entry):
         order.get("order_id") or "",
     )
 
+
+def is_yes_runtime_order(order):
+    return (
+        (order or {}).get("strategy_leg") == "YES_SNIPER"
+        and (order or {}).get("token_side") == "yes"
+    )
+
 def collect_replay_orders(markets, market_filter=None, order_filter=None, limit=5):
     replay_orders = []
     for market in markets or []:
@@ -248,6 +255,8 @@ def collect_replay_orders(markets, market_filter=None, order_filter=None, limit=
         orders.extend(market.get("order_history", []) or [])
 
         for order in orders:
+            if not is_yes_runtime_order(order):
+                continue
             if market_filter and order.get("market_id") != market_filter:
                 continue
             if order_filter and order.get("order_id") != order_filter:

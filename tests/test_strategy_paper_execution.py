@@ -84,6 +84,7 @@ def test_build_passive_order_intent_has_stable_reasons_and_deterministic_order(m
     market = make_market()
     reservation = {
         "strategy_leg": "YES_SNIPER",
+        "token_side": "yes",
         "reserved_worst_loss": 20.0,
     }
     assessment = make_assessment()
