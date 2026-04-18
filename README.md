@@ -42,7 +42,7 @@ cd weatherbot
 uv sync
 ```
 
-如果你只想跑测试，确保环境里至少有 `requests` 和 `pytest`，然后直接使用 `uv run ...`。
+如果你只想跑测试，确保环境里至少有 `requests`、`pytest` 和 `pytest-cov`，然后直接使用 `uv run ...`。
 
 ## 配置
 
@@ -79,11 +79,13 @@ uv sync
 
 ## 回归验证
 
-完整回归：
+默认回归（同时执行 `weatherbot` 包 coverage gate，低于 75% 直接失败）：
 
 ```bash
 uv run pytest -q
 ```
+
+这条命令已经内置 `--cov=weatherbot --cov-report=term-missing --cov-fail-under=75`，不需要额外手动拼 coverage 参数。
 
 兼容入口 spot check：
 
