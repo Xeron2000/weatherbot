@@ -131,6 +131,41 @@ def load_order_policy_config(config_dict):
 
 ORDER_POLICY = load_order_policy_config(_cfg)
 
+
+def load_paper_execution_config(config_dict):
+    raw = config_dict.get("paper_execution")
+    if not isinstance(raw, dict):
+        raise ValueError("paper_execution_missing_block")
+
+    spec = {
+        "submission_latency_ms": {"type": int, "min": 1},
+        "queue_ahead_shares": {"type": float, "min": 0.0},
+        "queue_ahead_ratio": {"type": float, "min": 0.0, "max": 1.0},
+        "touch_not_fill_min_touches": {"type": int, "min": 1},
+        "partial_fill_slice_ratio": {"type": float, "min": 0.000001, "max": 1.0},
+        "cancel_latency_ms": {"type": int, "min": 1},
+        "adverse_fill_buffer_ticks": {"type": int, "min": 0},
+    }
+
+    loaded = {}
+    for key, rules in spec.items():
+        if key not in raw:
+            raise ValueError(f"paper_execution_missing_{key}")
+        value = raw.get(key)
+        try:
+            value = rules["type"](value)
+        except Exception:
+            raise ValueError(f"paper_execution_invalid_{key}")
+        if value < rules["min"]:
+            raise ValueError(f"paper_execution_invalid_{key}")
+        if "max" in rules and value > rules["max"]:
+            raise ValueError(f"paper_execution_invalid_{key}")
+        loaded[key] = value
+    return loaded
+
+
+PAPER_EXECUTION = load_paper_execution_config(_cfg)
+
 MAX_BET = YES_STRATEGY.get("max_size", _cfg.get("max_bet", 20.0))  # compatibility
 MIN_EV = _cfg.get("min_ev", 0.10)
 MAX_PRICE = YES_STRATEGY.get("max_price", _cfg.get("max_price", 0.45))
@@ -1715,10 +1750,332 @@ def is_order_unfinished(order):
     return (order or {}).get("status") in {"planned", "working", "partial"}
 
 
+def build_empty_paper_execution_state():
+    return {
+        "order_id": None,
+        "status": "idle",
+        "submitted_at": None,
+        "submit_ready_at": None,
+        "cancel_requested_at": None,
+        "cancel_ready_at": None,
+        "touch_count": 0,
+        "queue_ahead_shares": 0.0,
+        "filled_shares": 0.0,
+        "remaining_shares": 0.0,
+        "last_event_ts": None,
+        "last_reason": None,
+    }
+
+
+def ensure_market_paper_execution_defaults(market):
+    state = market.get("paper_execution_state")
+    if not isinstance(state, dict):
+        state = build_empty_paper_execution_state()
+    else:
+        base = build_empty_paper_execution_state()
+        base.update(state)
+        state = base
+    market["paper_execution_state"] = state
+    market.setdefault("execution_events", [])
+    metrics = market.get("execution_metrics")
+    if not isinstance(metrics, dict):
+        metrics = {}
+    metrics.setdefault("event_count", 0)
+    metrics.setdefault("touch_not_fill_count", 0)
+    metrics.setdefault("partial_fill_count", 0)
+    metrics.setdefault("filled_count", 0)
+    metrics.setdefault("cancel_requested_count", 0)
+    metrics.setdefault("cancel_count", 0)
+    metrics.setdefault("filled_shares_total", 0.0)
+    market["execution_metrics"] = metrics
+    return market
+
+
 def ensure_market_order_defaults(market):
     market.setdefault("active_order", None)
     market.setdefault("order_history", [])
+    ensure_market_paper_execution_defaults(market)
     return market
+
+
+def parse_simulation_ts(ts):
+    parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def add_ms_to_ts(ts, ms):
+    return (parse_simulation_ts(ts) + timedelta(milliseconds=int(ms))).isoformat()
+
+
+def build_paper_execution_state(order, paper_config, now_ts):
+    shares = round(float((order or {}).get("shares", 0.0) or 0.0), 4)
+    queue_ahead = max(
+        float(paper_config.get("queue_ahead_shares", 0.0) or 0.0),
+        shares * float(paper_config.get("queue_ahead_ratio", 0.0) or 0.0),
+    )
+    return {
+        "order_id": (order or {}).get("order_id"),
+        "status": "submitting",
+        "submitted_at": now_ts,
+        "submit_ready_at": add_ms_to_ts(
+            now_ts, paper_config.get("submission_latency_ms", 0)
+        ),
+        "cancel_requested_at": None,
+        "cancel_ready_at": None,
+        "touch_count": 0,
+        "queue_ahead_shares": round(queue_ahead, 4),
+        "filled_shares": 0.0,
+        "remaining_shares": shares,
+        "last_event_ts": now_ts,
+        "last_reason": "submission_latency_pending",
+    }
+
+
+def record_execution_event(
+    events,
+    order,
+    event_type,
+    ts,
+    status_before,
+    status_after,
+    reason,
+    simulated_fill_shares=0.0,
+    queue_ahead_shares=0.0,
+    latency_ms=0,
+    patch=None,
+):
+    event = {
+        "event_type": event_type,
+        "ts": ts,
+        "order_id": (order or {}).get("order_id"),
+        "status_before": status_before,
+        "status_after": status_after,
+        "reason": reason,
+        "simulated_fill_shares": round(float(simulated_fill_shares or 0.0), 4),
+        "queue_ahead_shares": round(float(queue_ahead_shares or 0.0), 4),
+        "latency_ms": int(latency_ms or 0),
+    }
+    if patch:
+        event.update(patch)
+    updated = list(events or [])
+    updated.append(event)
+    return updated, event
+
+
+def finalize_paper_step(market, state, events, metrics, filled_shares, event=None):
+    market["paper_execution_state"] = state
+    market["execution_events"] = events
+    metrics["event_count"] = len(events)
+    market["execution_metrics"] = metrics
+    return {
+        "market": market,
+        "state": state,
+        "event": event,
+        "filled_shares": round(float(filled_shares or 0.0), 4),
+    }
+
+
+def simulate_paper_execution_step(
+    market,
+    order,
+    quote_snapshot,
+    now_ts,
+    paper_config=None,
+    cancel_requested=False,
+):
+    cfg = paper_config or PAPER_EXECUTION
+    updated_market = dict(market or {})
+    ensure_market_paper_execution_defaults(updated_market)
+    state = dict(updated_market.get("paper_execution_state") or {})
+    events = list(updated_market.get("execution_events", []) or [])
+    metrics = dict(updated_market.get("execution_metrics", {}) or {})
+    order_id = (order or {}).get("order_id")
+
+    if not order_id:
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+    if state.get("order_id") != order_id or state.get("status") in {None, "idle"}:
+        status_before = state.get("status") or "idle"
+        state = build_paper_execution_state(order, cfg, now_ts)
+        events, event = record_execution_event(
+            events,
+            order,
+            "submission_pending",
+            now_ts,
+            status_before,
+            "submitting",
+            "submission_latency_pending",
+            queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+            latency_ms=cfg.get("submission_latency_ms", 0),
+        )
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
+
+    current_status = state.get("status")
+    now_dt = parse_simulation_ts(now_ts)
+
+    if cancel_requested:
+        if current_status == "cancel_pending":
+            cancel_ready_at = state.get("cancel_ready_at")
+            if cancel_ready_at and now_dt >= parse_simulation_ts(cancel_ready_at):
+                state["status"] = "canceled"
+                state["last_event_ts"] = now_ts
+                state["last_reason"] = "cancel_latency_elapsed"
+                events, event = record_execution_event(
+                    events,
+                    order,
+                    "cancel_confirmed",
+                    now_ts,
+                    "cancel_pending",
+                    "canceled",
+                    "cancel_latency_elapsed",
+                    queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+                    latency_ms=cfg.get("cancel_latency_ms", 0),
+                )
+                metrics["cancel_count"] = int(metrics.get("cancel_count", 0) or 0) + 1
+                return finalize_paper_step(
+                    updated_market, state, events, metrics, 0.0, event
+                )
+            return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+        if current_status not in {"filled", "canceled"}:
+            state["status"] = "cancel_pending"
+            state["cancel_requested_at"] = now_ts
+            state["cancel_ready_at"] = add_ms_to_ts(
+                now_ts, cfg.get("cancel_latency_ms", 0)
+            )
+            state["last_event_ts"] = now_ts
+            state["last_reason"] = "cancel_latency_pending"
+            events, event = record_execution_event(
+                events,
+                order,
+                "cancel_requested",
+                now_ts,
+                current_status,
+                "cancel_pending",
+                "cancel_latency_pending",
+                queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+                latency_ms=cfg.get("cancel_latency_ms", 0),
+            )
+            metrics["cancel_requested_count"] = (
+                int(metrics.get("cancel_requested_count", 0) or 0) + 1
+            )
+            return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
+
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+    if current_status == "submitting":
+        submit_ready_at = state.get("submit_ready_at")
+        if submit_ready_at and now_dt < parse_simulation_ts(submit_ready_at):
+            return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+        state["status"] = "queued"
+        state["last_event_ts"] = now_ts
+        state["last_reason"] = "submission_latency_elapsed"
+        events, event = record_execution_event(
+            events,
+            order,
+            "submission_released",
+            now_ts,
+            "submitting",
+            "queued",
+            "submission_latency_elapsed",
+            queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+            latency_ms=cfg.get("submission_latency_ms", 0),
+        )
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
+
+    if current_status not in {"queued", "partial"}:
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+    quote = find_quote_for_market(quote_snapshot, (order or {}).get("market_id"))
+    token_side = (order or {}).get("token_side")
+    side_quote = (
+        quote.get(token_side) if quote and token_side in {"yes", "no"} else None
+    ) or {}
+
+    ask = safe_float(side_quote.get("ask"))
+    ask_size = safe_float(side_quote.get("ask_size"))
+    tick_size = safe_float(side_quote.get("tick_size")) or 0.0
+    limit_price = float((order or {}).get("limit_price", 0.0) or 0.0)
+    fill_threshold = limit_price - (
+        tick_size * int(cfg.get("adverse_fill_buffer_ticks", 0) or 0)
+    )
+
+    if ask is None or ask_size is None or ask > fill_threshold:
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+    state["touch_count"] = int(state.get("touch_count", 0) or 0) + 1
+    queue_before = round(float(state.get("queue_ahead_shares", 0.0) or 0.0), 4)
+    queue_after = round(max(0.0, queue_before - ask_size), 4)
+    if queue_before > 0 and queue_after > 0:
+        state["queue_ahead_shares"] = queue_after
+        state["last_event_ts"] = now_ts
+        state["last_reason"] = "queue_ahead_remaining"
+        events, event = record_execution_event(
+            events,
+            order,
+            "touch_not_fill",
+            now_ts,
+            current_status,
+            current_status,
+            "queue_ahead_remaining",
+            queue_ahead_shares=queue_after,
+        )
+        metrics["touch_not_fill_count"] = (
+            int(metrics.get("touch_not_fill_count", 0) or 0) + 1
+        )
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
+
+    executable_shares = round(max(0.0, ask_size - queue_before), 4)
+    remaining_before = round(float(state.get("remaining_shares", 0.0) or 0.0), 4)
+    target_slice = round(
+        remaining_before * float(cfg.get("partial_fill_slice_ratio", 0.0) or 0.0),
+        4,
+    )
+    if current_status == "partial":
+        target_slice = remaining_before
+    if remaining_before > 0 and target_slice <= 0:
+        target_slice = remaining_before
+    fill_shares = round(min(remaining_before, executable_shares, target_slice), 4)
+    if fill_shares <= 0:
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0)
+
+    state["queue_ahead_shares"] = 0.0
+    state["filled_shares"] = round(
+        float(state.get("filled_shares", 0.0) or 0.0) + fill_shares,
+        4,
+    )
+    state["remaining_shares"] = round(max(0.0, remaining_before - fill_shares), 4)
+    if state["remaining_shares"] == 0.0:
+        next_status = "filled"
+        event_type = "filled"
+        reason = "queue_cleared_full_fill"
+        metrics["filled_count"] = int(metrics.get("filled_count", 0) or 0) + 1
+    else:
+        next_status = "partial"
+        event_type = "partial_fill"
+        reason = "queue_cleared_partial_fill"
+        metrics["partial_fill_count"] = int(metrics.get("partial_fill_count", 0) or 0) + 1
+    state["status"] = next_status
+    state["last_event_ts"] = now_ts
+    state["last_reason"] = reason
+    metrics["filled_shares_total"] = round(
+        float(metrics.get("filled_shares_total", 0.0) or 0.0) + fill_shares,
+        4,
+    )
+    events, event = record_execution_event(
+        events,
+        order,
+        event_type,
+        now_ts,
+        current_status,
+        next_status,
+        reason,
+        simulated_fill_shares=fill_shares,
+        queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+    )
+    return finalize_paper_step(updated_market, state, events, metrics, fill_shares, event)
 
 
 def build_order_restore_entry(market, order):
@@ -2333,6 +2690,17 @@ def new_market(city_slug, date_str, event, hours):
         "reserved_exposure": None,
         "active_order": None,
         "order_history": [],
+        "paper_execution_state": build_empty_paper_execution_state(),
+        "execution_events": [],
+        "execution_metrics": {
+            "event_count": 0,
+            "touch_not_fill_count": 0,
+            "partial_fill_count": 0,
+            "filled_count": 0,
+            "cancel_requested_count": 0,
+            "cancel_count": 0,
+            "filled_shares_total": 0.0,
+        },
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
