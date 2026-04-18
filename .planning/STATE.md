@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready
-stopped_at: Completed quick task 260418-nr5
-last_updated: "2026-04-18T09:12:58Z"
-last_activity: 2026-04-18 - Completed quick task 260418-nr5: 新增 strategy profile 实盘手册，明确当前推荐 1000 及三档切换指引
+stopped_at: Completed quick task 260418-o5m
+last_updated: "2026-04-18T09:28:19Z"
+last_activity: 2026-04-18 - Completed quick task 260418-o5m: 默认 strategy_profile 切到 100，并补齐 100 档观察清单与 smoke 校验
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-nr5: 新增 strategy profile 实盘手册，明确当前推荐 1000 及三档切换指引
+Last activity: 2026-04-18 - Completed quick task 260418-o5m: 默认 strategy_profile 切到 100，并补齐 100 档观察清单与 smoke 校验
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -124,6 +124,7 @@ None yet.
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 260418-o5m | 默认 strategy_profile 切到 100，补齐 100 档观察清单并做 merge smoke/status/report 校验 | 2026-04-18 | c3e8af6, 8d0ddfc | Verified | [260418-o5m-strategy-profile-100-bot](./quick/260418-o5m-strategy-profile-100-bot/) |
 | 260418-nr5 | 新增 strategy profile 实盘手册，明确当前推荐 1000、三档差异、升级时机与切换检查项 | 2026-04-18 | 585ec85 | Verified | [260418-nr5-strategy-profile-docs](./quick/260418-nr5-strategy-profile-docs/) |
 | 260418-n5y | 增加 100 / 1000 / 10000 三档 strategy profile，保持 env-first 配置语义与入口兼容 | 2026-04-18 | ac0763d | Verified | [260418-n5y-100-1000-10000](./quick/260418-n5y-100-1000-10000/) |
 | 260418-ehf | 把无用的代码文件和旧代码死代码清理掉，然后把bot文件拆分成模块化 | 2026-04-18 | 73777e5 | Verified | [260418-ehf-bot](./quick/260418-ehf-bot/) |
@@ -141,6 +142,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T16:06:50.545Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-04-18T09:28:19Z
+Stopped at: Completed quick task 260418-o5m
 Resume file: None
