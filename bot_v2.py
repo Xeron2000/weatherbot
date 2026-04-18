@@ -1758,6 +1758,7 @@ def build_empty_paper_execution_state():
         "submit_ready_at": None,
         "cancel_requested_at": None,
         "cancel_ready_at": None,
+        "cancel_reason": None,
         "touch_count": 0,
         "queue_ahead_shares": 0.0,
         "filled_shares": 0.0,
@@ -1884,6 +1885,7 @@ def simulate_paper_execution_step(
     now_ts,
     paper_config=None,
     cancel_requested=False,
+    cancel_reason=None,
 ):
     cfg = paper_config or PAPER_EXECUTION
     updated_market = dict(market or {})
@@ -1932,6 +1934,9 @@ def simulate_paper_execution_step(
                     "cancel_latency_elapsed",
                     queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
                     latency_ms=cfg.get("cancel_latency_ms", 0),
+                    patch={
+                        "cancel_reason": state.get("cancel_reason"),
+                    },
                 )
                 metrics["cancel_count"] = int(metrics.get("cancel_count", 0) or 0) + 1
                 return finalize_paper_step(
@@ -1945,6 +1950,7 @@ def simulate_paper_execution_step(
             state["cancel_ready_at"] = add_ms_to_ts(
                 now_ts, cfg.get("cancel_latency_ms", 0)
             )
+            state["cancel_reason"] = cancel_reason or state.get("cancel_reason")
             state["last_event_ts"] = now_ts
             state["last_reason"] = "cancel_latency_pending"
             events, event = record_execution_event(
@@ -1957,6 +1963,9 @@ def simulate_paper_execution_step(
                 "cancel_latency_pending",
                 queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
                 latency_ms=cfg.get("cancel_latency_ms", 0),
+                patch={
+                    "cancel_reason": state.get("cancel_reason"),
+                },
             )
             metrics["cancel_requested_count"] = (
                 int(metrics.get("cancel_requested_count", 0) or 0) + 1
@@ -2027,6 +2036,25 @@ def simulate_paper_execution_step(
         )
         return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
 
+    if state["touch_count"] < int(cfg.get("touch_not_fill_min_touches", 1) or 1):
+        state["queue_ahead_shares"] = queue_after
+        state["last_event_ts"] = now_ts
+        state["last_reason"] = "touch_threshold_not_met"
+        events, event = record_execution_event(
+            events,
+            order,
+            "touch_not_fill",
+            now_ts,
+            current_status,
+            current_status,
+            "touch_threshold_not_met",
+            queue_ahead_shares=queue_after,
+        )
+        metrics["touch_not_fill_count"] = (
+            int(metrics.get("touch_not_fill_count", 0) or 0) + 1
+        )
+        return finalize_paper_step(updated_market, state, events, metrics, 0.0, event)
+
     executable_shares = round(max(0.0, ask_size - queue_before), 4)
     remaining_before = round(float(state.get("remaining_shares", 0.0) or 0.0), 4)
     target_slice = round(
@@ -2074,6 +2102,7 @@ def simulate_paper_execution_step(
         reason,
         simulated_fill_shares=fill_shares,
         queue_ahead_shares=state.get("queue_ahead_shares", 0.0),
+        patch={"simulated_fill_price": ask},
     )
     return finalize_paper_step(updated_market, state, events, metrics, fill_shares, event)
 
@@ -2254,6 +2283,75 @@ def transition_order_terminal(market, risk_state, order, next_status, reason, ts
     return terminal
 
 
+def sync_active_order_with_paper_engine(
+    market,
+    risk_state,
+    active_order,
+    assessment,
+    forecast_snap,
+    ts,
+    cancel_requested=False,
+    cancel_reason=None,
+):
+    step = simulate_paper_execution_step(
+        market,
+        active_order,
+        market.get("quote_snapshot", []),
+        ts,
+        paper_config=PAPER_EXECUTION,
+        cancel_requested=cancel_requested,
+        cancel_reason=cancel_reason,
+    )
+    market["paper_execution_state"] = step["market"].get("paper_execution_state")
+    market["execution_events"] = step["market"].get("execution_events", [])
+    market["execution_metrics"] = step["market"].get("execution_metrics", {})
+
+    event = step.get("event") or {}
+    fill_shares = round(float(step.get("filled_shares", 0.0) or 0.0), 4)
+    state = market.get("paper_execution_state", {}) or {}
+    state_status = state.get("status")
+
+    if fill_shares > 0 and state_status in {"partial", "filled"}:
+        transitioned = apply_order_transition(
+            active_order,
+            "filled" if state_status == "filled" else "partial",
+            event.get("reason") or state.get("last_reason") or "paper_fill",
+            event.get("ts") or ts,
+            fill_shares=fill_shares,
+            fill_price=event.get("simulated_fill_price"),
+        )
+        if state_status == "partial":
+            market["active_order"] = transitioned
+            return {"filled_cost": 0.0, "opened_position": False}
+
+        archive_order(market, transitioned)
+        release_reserved_exposure(market, risk_state, "filled", released_at=ts)
+        market["position"] = build_position_from_order(
+            market, transitioned, assessment, forecast_snap
+        )
+        return {
+            "filled_cost": round(
+                float((market.get("position") or {}).get("cost", 0.0) or 0.0), 2
+            ),
+            "opened_position": market.get("position") is not None,
+        }
+
+    if state_status == "canceled":
+        terminal_reason = cancel_reason or state.get("cancel_reason") or "canceled"
+        terminal = apply_order_transition(active_order, "canceled", terminal_reason, ts)
+        archive_order(market, terminal)
+        maybe_release_order_reservation(market, risk_state, terminal_reason, ts)
+        return {"filled_cost": 0.0, "opened_position": False}
+
+    if active_order.get("status") == "planned":
+        active_order = apply_order_transition(active_order, "working", "order_resumed", ts)
+    else:
+        active_order = dict(active_order)
+        active_order["updated_at"] = ts
+    market["active_order"] = active_order
+    return {"filled_cost": 0.0, "opened_position": False}
+
+
 def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     ensure_market_order_defaults(market)
     ts = (
@@ -2267,17 +2365,10 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
         archive_order(market, active_order)
         active_order = None
 
+    cancel_reason = None
+
     if not market_ready:
-        if active_order:
-            transition_order_terminal(
-                market,
-                risk_state,
-                active_order,
-                "canceled",
-                "market_no_longer_ready",
-                ts,
-            )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = "market_no_longer_ready"
 
     if (
         market.get("position")
@@ -2291,54 +2382,25 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     route = find_route_for_reservation(market)
 
     if active_order and reservation and reservation.get("release_reason"):
-        transition_order_terminal(
-            market,
-            risk_state,
-            active_order,
-            "canceled",
-            reservation.get("release_reason"),
-            ts,
-        )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = reservation.get("release_reason")
 
     if active_order and not reservation:
-        transition_order_terminal(
-            market, risk_state, active_order, "canceled", "candidate_missing", ts
-        )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = "candidate_missing"
 
     if active_order and assessment is None:
-        transition_order_terminal(
-            market, risk_state, active_order, "canceled", "candidate_missing", ts
-        )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = cancel_reason or "candidate_missing"
 
     if active_order and assessment.get("status") != "accepted":
-        transition_order_terminal(
-            market, risk_state, active_order, "canceled", "candidate_downgraded", ts
-        )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = cancel_reason or "candidate_downgraded"
 
     if active_order and route and route.get("status") != "accepted":
-        transition_order_terminal(
-            market, risk_state, active_order, "canceled", "route_not_accepted", ts
-        )
-        return {"filled_cost": 0.0, "opened_position": False}
+        cancel_reason = cancel_reason or "route_not_accepted"
 
     if not reservation or not assessment:
         return {"filled_cost": 0.0, "opened_position": False}
 
     active_order = market.get("active_order")
     if active_order:
-        if active_order.get("status") == "planned":
-            active_order = apply_order_transition(
-                active_order,
-                "working",
-                "order_resumed",
-                ts,
-            )
-            market["active_order"] = active_order
-
         if active_order.get("expires_at"):
             try:
                 if datetime.fromisoformat(
@@ -2367,62 +2429,17 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
                     return {"filled_cost": 0.0, "opened_position": False}
             except Exception:
                 pass
-
-    active_order = market.get("active_order")
-    quote = find_quote_for_market(
-        market.get("quote_snapshot", []),
-        (active_order or {}).get("market_id"),
-    )
-    side_quote = (
-        quote.get((active_order or {}).get("token_side"))
-        if quote and (active_order or {}).get("token_side") in {"yes", "no"}
-        else None
-    ) or {}
-
-    if active_order:
-        ask = safe_float(side_quote.get("ask"))
-        ask_size = safe_float(side_quote.get("ask_size"))
-        if ask is not None and ask_size is not None:
-            if ask <= float(active_order.get("limit_price", 0.0) or 0.0):
-                fill_shares = round(
-                    min(
-                        ask_size,
-                        float(active_order.get("remaining_shares", 0.0) or 0.0),
-                    ),
-                    4,
-                )
-                if fill_shares > 0:
-                    next_status = (
-                        "filled"
-                        if fill_shares
-                        >= float(active_order.get("remaining_shares", 0.0) or 0.0)
-                        else "partial"
-                    )
-                    transitioned = apply_order_transition(
-                        active_order,
-                        next_status,
-                        "quote_touched_limit",
-                        ts,
-                        fill_shares=fill_shares,
-                        fill_price=ask,
-                    )
-                    if next_status == "partial":
-                        market["active_order"] = transitioned
-                        return {"filled_cost": 0.0, "opened_position": False}
-
-                    archive_order(market, transitioned)
-                    market["position"] = build_position_from_order(
-                        market, transitioned, assessment, forecast_snap
-                    )
-                    return {
-                        "filled_cost": round(
-                            float(
-                                (market.get("position") or {}).get("cost", 0.0) or 0.0
-                            ),
-                            2,
-                        ),
-                        "opened_position": market.get("position") is not None,
-                    }
+        active_order = market.get("active_order")
+        return sync_active_order_with_paper_engine(
+            market,
+            risk_state,
+            active_order,
+            assessment,
+            forecast_snap,
+            ts,
+            cancel_requested=bool(cancel_reason),
+            cancel_reason=cancel_reason,
+        )
 
     built = build_passive_order_intent(
         market,
@@ -2458,55 +2475,14 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     active_order = market.get("active_order")
     if not active_order:
         return {"filled_cost": 0.0, "opened_position": False}
-
-    quote = find_quote_for_market(
-        market.get("quote_snapshot", []), active_order.get("market_id")
-    )
-    side_quote = (
-        quote.get(active_order.get("token_side"))
-        if quote and active_order.get("token_side") in {"yes", "no"}
-        else None
-    ) or {}
-    ask = safe_float(side_quote.get("ask"))
-    ask_size = safe_float(side_quote.get("ask_size"))
-    if ask is None or ask_size is None:
-        return {"filled_cost": 0.0, "opened_position": False}
-    if ask > float(active_order.get("limit_price", 0.0) or 0.0):
-        return {"filled_cost": 0.0, "opened_position": False}
-
-    fill_shares = round(
-        min(ask_size, float(active_order.get("remaining_shares", 0.0) or 0.0)), 4
-    )
-    if fill_shares <= 0:
-        return {"filled_cost": 0.0, "opened_position": False}
-
-    next_status = (
-        "filled"
-        if fill_shares >= float(active_order.get("remaining_shares", 0.0) or 0.0)
-        else "partial"
-    )
-    transitioned = apply_order_transition(
+    return sync_active_order_with_paper_engine(
+        market,
+        risk_state,
         active_order,
-        next_status,
-        "quote_touched_limit",
+        assessment,
+        forecast_snap,
         ts,
-        fill_shares=fill_shares,
-        fill_price=ask,
     )
-    if next_status == "partial":
-        market["active_order"] = transitioned
-        return {"filled_cost": 0.0, "opened_position": False}
-
-    archive_order(market, transitioned)
-    market["position"] = build_position_from_order(
-        market, transitioned, assessment, forecast_snap
-    )
-    return {
-        "filled_cost": round(
-            float((market.get("position") or {}).get("cost", 0.0) or 0.0), 2
-        ),
-        "opened_position": market.get("position") is not None,
-    }
 
 
 def route_market_candidates(
@@ -2559,6 +2535,8 @@ def reconcile_market_reservation(market, risk_state, router_cfg, reserved_at=Non
     decisions = []
 
     if existing and not existing.get("release_reason"):
+        active_order = market.get("active_order")
+        unfinished_order = is_order_unfinished(active_order)
         matching_assessment = next(
             (
                 assessment
@@ -2569,13 +2547,15 @@ def reconcile_market_reservation(market, risk_state, router_cfg, reserved_at=Non
         )
 
         if matching_assessment is None:
-            release_reserved_exposure(
-                market, risk_state, "candidate_missing", reserved_at
-            )
+            if not unfinished_order:
+                release_reserved_exposure(
+                    market, risk_state, "candidate_missing", reserved_at
+                )
         elif matching_assessment.get("status") not in {"accepted", "size_down"}:
-            release_reserved_exposure(
-                market, risk_state, "candidate_downgraded", reserved_at
-            )
+            if not unfinished_order:
+                release_reserved_exposure(
+                    market, risk_state, "candidate_downgraded", reserved_at
+                )
         else:
             remove_reservation_from_risk_state(risk_state, existing)
             kept_decision = {
