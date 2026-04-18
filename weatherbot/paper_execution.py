@@ -620,6 +620,7 @@ def build_position_from_order(market, order, assessment, forecast_snap):
         return None
 
     entry_price = average_order_fill_price(order)
+    token_side = (order or {}).get("token_side")
     rng = list((order or {}).get("range") or [None, None])
     quote_ctx = (assessment or {}).get("quote_context", {}) or {}
     fair_price = (assessment or {}).get("fair_price")
@@ -646,6 +647,8 @@ def build_position_from_order(market, order, assessment, forecast_snap):
         "bucket_low": rng[0],
         "bucket_high": rng[1],
         "entry_price": entry_price,
+        "token_side": token_side,
+        "entry_side": token_side,
         "bid_at_entry": quote_ctx.get("bid"),
         "spread": quote_ctx.get("spread"),
         "shares": filled_shares,
