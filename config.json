@@ -9,7 +9,7 @@
   "calibration_min": 30,
   "vc_key": "",
   "max_slippage": 0.03,
-  "strategy_profile": "1000",
+  "strategy_profile": "100",
   "yes_strategy": {
     "max_price": 0.05,
     "min_probability": 0.01,
