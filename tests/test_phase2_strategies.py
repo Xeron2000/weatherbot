@@ -209,6 +209,133 @@ def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
     assert no_result["status"] == "accepted"
 
 
+def test_yes_peak_window_penalty_uses_city_local_time_not_utc(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    bucket = make_bucket_probability(0.18)
+    quote = make_quote_snapshot(yes_ask=0.11)
+
+    morning_result = bot_v2.evaluate_yes_candidate(
+        bucket,
+        quote,
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-18",
+            "metar": 68.4,
+            "now_ts": "2026-04-18T13:30:00+00:00",
+        },
+    )
+    late_result = bot_v2.evaluate_yes_candidate(
+        bucket,
+        quote,
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-18",
+            "metar": 68.4,
+            "now_ts": "2026-04-18T21:30:00+00:00",
+        },
+    )
+
+    assert morning_result["probability_penalty_factor"] == 1.0
+    assert morning_result["status"] == "accepted"
+    assert late_result["probability_penalty_factor"] == 0.35
+    assert late_result["adjusted_probability"] == 0.063
+    assert late_result["status"] == "rejected"
+    assert "yes_peak_window_metar_near_bucket_ceiling" in late_result["reasons"]
+
+
+def test_yes_peak_window_penalty_skips_non_same_day_market(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_yes_candidate(
+        make_bucket_probability(0.18),
+        make_quote_snapshot(yes_ask=0.11),
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-19",
+            "metar": 68.9,
+            "now_ts": "2026-04-18T21:30:00+00:00",
+        },
+    )
+
+    assert result["probability_penalty_factor"] == 1.0
+    assert result["probability_penalty_reason"] is None
+    assert result["status"] == "accepted"
+
+
+def test_yes_peak_window_penalty_does_not_touch_no_candidate(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "YES_STRATEGY",
+        {
+            "max_price": 0.25,
+            "min_probability": 0.14,
+            "min_edge": 0.03,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.7,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    bucket = make_bucket_probability(0.18)
+    quote = make_quote_snapshot(yes_ask=0.11, no_bid=0.9)
+    market_context = {
+        "city_slug": "nyc",
+        "market_date": "2026-04-18",
+        "metar": 68.8,
+        "now_ts": "2026-04-18T21:30:00+00:00",
+    }
+
+    yes_result = bot_v2.evaluate_yes_candidate(bucket, quote, 24, market_context)
+    no_result = bot_v2.evaluate_no_candidate(bucket, quote, 24)
+
+    assert yes_result["probability_penalty_factor"] == 0.35
+    assert yes_result["status"] == "rejected"
+    assert no_result["status"] == "accepted"
+    assert "yes_peak_window_metar_near_bucket_ceiling" not in no_result["reasons"]
+
+
 def test_scan_and_update_persists_dual_candidate_assessments(
     phase2_gamma_event,
     phase2_weather_snapshot,
