@@ -5,7 +5,9 @@ import weatherbot
 from weatherbot import paper_execution, strategy
 
 
-def configure_strategy_runtime(monkeypatch, no_kelly_fraction=1.0, no_max_size=20.0):
+def configure_strategy_runtime(
+    monkeypatch, no_kelly_fraction=1.0, no_max_size=20.0, no_max_ask=None
+):
     yes_strategy = {
         "max_price": 0.25,
         "min_probability": 0.14,
@@ -24,6 +26,8 @@ def configure_strategy_runtime(monkeypatch, no_kelly_fraction=1.0, no_max_size=2
         "max_size": no_max_size,
         "min_size": 1.0,
     }
+    if no_max_ask is not None:
+        no_strategy["max_ask"] = no_max_ask
     monkeypatch.setattr(strategy, "YES_STRATEGY", yes_strategy)
     monkeypatch.setattr(strategy, "NO_STRATEGY", no_strategy)
     monkeypatch.setattr(strategy, "NO_KELLY_FRACTION", no_kelly_fraction, raising=False)
@@ -233,6 +237,80 @@ def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeyp
     assert no_assessment["status"] == "accepted"
     assert no_assessment["reasons"] == []
     assert no_assessment["quote_context"]["bid"] == 0.01
+    assert no_assessment["quote_context"]["ask"] == 0.88
+
+
+def test_no_assessment_marks_ask_above_max_as_non_executable(monkeypatch):
+    configure_strategy_runtime(monkeypatch, no_max_ask=0.95)
+    assessments = strategy.build_candidate_assessments(
+        [
+            {
+                "market_id": "mkt-65-69",
+                "range": [65.0, 69.0],
+                "aggregate_probability": 0.04,
+                "fair_yes": 0.04,
+                "fair_no": 0.96,
+            }
+        ],
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+                "no": {"bid": 0.96, "ask": 0.99, "spread": 0.03},
+                "execution_stop_reasons": [],
+            }
+        ],
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-17",
+            "metar": 66.0,
+            "now_ts": "2026-04-18T12:00:00+00:00",
+        },
+    )
+
+    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+
+    assert no_assessment["strategy_leg"] == "NO_CARRY"
+    assert no_assessment["status"] == "reprice"
+    assert no_assessment["reasons"] == ["ask_above_max"]
+    assert no_assessment["quote_context"]["ask"] == 0.99
+
+
+def test_no_assessment_keeps_valid_no_ask_executable_under_max_ask(monkeypatch):
+    configure_strategy_runtime(monkeypatch, no_max_ask=0.95)
+    assessments = strategy.build_candidate_assessments(
+        [
+            {
+                "market_id": "mkt-65-69",
+                "range": [65.0, 69.0],
+                "aggregate_probability": 0.04,
+                "fair_yes": 0.04,
+                "fair_no": 0.96,
+            }
+        ],
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+                "no": {"bid": 0.85, "ask": 0.88, "spread": 0.03},
+                "execution_stop_reasons": [],
+            }
+        ],
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-17",
+            "metar": 66.0,
+            "now_ts": "2026-04-18T12:00:00+00:00",
+        },
+    )
+
+    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+
+    assert no_assessment["strategy_leg"] == "NO_CARRY"
+    assert no_assessment["status"] == "accepted"
+    assert no_assessment["reasons"] == []
     assert no_assessment["quote_context"]["ask"] == 0.88
 
 
