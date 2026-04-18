@@ -2387,16 +2387,16 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
     if active_order and not reservation:
         cancel_reason = "candidate_missing"
 
-    if active_order and assessment is None:
-        cancel_reason = cancel_reason or "candidate_missing"
-
-    if active_order and assessment.get("status") != "accepted":
-        cancel_reason = cancel_reason or "candidate_downgraded"
+    if active_order:
+        if assessment is None:
+            cancel_reason = cancel_reason or "candidate_missing"
+        elif assessment.get("status") != "accepted":
+            cancel_reason = cancel_reason or "candidate_downgraded"
 
     if active_order and route and route.get("status") != "accepted":
         cancel_reason = cancel_reason or "route_not_accepted"
 
-    if not reservation or not assessment:
+    if (not reservation or not assessment) and not active_order:
         return {"filled_cost": 0.0, "opened_position": False}
 
     active_order = market.get("active_order")
