@@ -1,4 +1,5 @@
 import json
+import os
 
 from .paths import CONFIG_FILE
 
@@ -96,4 +97,8 @@ def load_paper_execution_config(config_dict):
 
 def load_config(config_path=CONFIG_FILE):
     with open(config_path, encoding="utf-8") as handle:
-        return json.load(handle)
+        loaded = json.load(handle)
+    env_vc_key = os.environ.get("VISUAL_CROSSING_KEY")
+    if env_vc_key is not None:
+        loaded["vc_key"] = env_vc_key
+    return loaded
