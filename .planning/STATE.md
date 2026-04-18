@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready
 stopped_at: Completed 05-VERIFICATION.md
-last_updated: "2026-04-18T07:36:16Z"
-last_activity: 2026-04-18 - Completed quick task 260418-lo8: 将运行时 data/ 目录加入 .gitignore
+last_updated: "2026-04-18T07:54:13Z"
+last_activity: 2026-04-18 - Completed quick task 260418-lza: 收紧提交态 config.json 的 YES/NO 参数面
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-lo8: 将运行时 data/ 目录加入 .gitignore
+Last activity: 2026-04-18 - Completed quick task 260418-lza: 收紧提交态 config.json 的 YES/NO 参数面
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -133,6 +133,7 @@ None yet.
 | 260418-j1b | 本地将 NO 概率阈值从 0.95 调到 0.90 并复扫验证 | 2026-04-18 | local-only | Verified | [260418-j1b-no-strategy-min-probability-0-95-0-90-no](./quick/260418-j1b-no-strategy-min-probability-0-95-0-90-no/) |
 | 260418-kgq | 增加 NO max_ask 过滤并完成本地扫描验证 | 2026-04-18 | e2ebd47 | Verified | [260418-kgq-weatherbot-no-max-ask-ask-0-99-edge-no](./quick/260418-kgq-weatherbot-no-max-ask-ask-0-99-edge-no/) |
 | 260418-l91 | 改成 Visual Crossing env-first 配置并清理可提交配置面 | 2026-04-18 | f49ddd1 | Verified | [260418-l91-visual-crossing-key-env-example-no-strat](./quick/260418-l91-visual-crossing-key-env-example-no-strat/) |
+| 260418-lza | 收紧提交态 config.json 的 YES/NO 参数面 | 2026-04-18 | 0ed3a63 | Verified | [260418-lza-config-json-yes-no](./quick/260418-lza-config-json-yes-no/) |
 | 260418-lo8 | 将运行时 data/ 目录加入 .gitignore | 2026-04-18 | local-only | Verified | [260418-lo8-data-gitignore-data](./quick/260418-lo8-data-gitignore-data/) |
 
 ## Session Continuity
