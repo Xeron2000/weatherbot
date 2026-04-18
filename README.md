@@ -55,7 +55,21 @@ uv sync
 - Paper execution：`paper_execution`
 - 结算温度拉取：`vc_key`
 
-`vc_key` 继续来自 `config.json`，与现有代码和数据格式兼容。
+Visual Crossing key 现在走**环境变量优先**：运行时会先读取 `VISUAL_CROSSING_KEY`，只有未设置该环境变量时才回退到 `config.json` 里的 `vc_key`。
+
+推荐本地配置方式：
+
+```bash
+cp .env.example .env
+```
+
+然后把真实 key 写进你本地 `.env`：
+
+```bash
+VISUAL_CROSSING_KEY=your_real_key_here
+```
+
+仓库里的 `config.json` 会保留空的 `vc_key` 作为安全占位，避免把真实 secret 提交进 git。
 
 ## 数据持久化
 
