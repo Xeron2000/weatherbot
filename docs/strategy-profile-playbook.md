@@ -112,6 +112,19 @@
 4. 如果你确实需要自定义某个档位，应该改对应的 `strategy_profiles[profile_name]` 内容，而不是造成“顶层一套、profile 一套”的错觉。
 5. 切换后重新对照本手册中的关键数字，至少确认 YES 价格阈值、NO 价格/概率阈值、`max_size` 和 `global_usage_cap_pct` 符合预期。
 
+### 当前默认 `1000` 档的快速核对值
+
+如果你现在就是按推荐档位运行，至少应确认这些代表值和 `1000` preset 一致：
+
+- `strategy_profile = 1000`
+- YES：`max_price 0.05`、`min_probability 0.01`、`max_size 18.0`
+- NO：`min_price 0.78`、`max_ask 0.95`、`min_probability 0.88`、`max_size 30.0`
+- `risk_router.global_usage_cap_pct = 0.85`
+- `order_policy.max_order_hours_open = 72.0`
+- `paper_execution.submission_latency_ms = 3500`
+
+如果这些值对不上，先不要继续把结果解释成策略问题，先确认是不是档位没切对，或者你手工改了顶层字段却没同步 profile 本体。
+
 ## 注意事项
 
 - 当前推荐就是 `1000`，不是因为它“折中”，而是因为它最符合这个仓库现在要验证的目标：自动扫描、候选筛选、被动挂单、订单生命周期和持仓管理都要完整跑通，同时不把风险放大到 `100` 那么激进，也不把机会收缩到 `10000` 那么保守。
