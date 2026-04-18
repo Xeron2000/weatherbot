@@ -240,6 +240,7 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
 
 def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeypatch):
     configure_strategy_runtime(monkeypatch)
+    configure_paper_execution_runtime(monkeypatch)
     assessments = strategy.build_candidate_assessments(
         [
             {
@@ -270,10 +271,86 @@ def test_no_assessment_stays_executable_when_bid_is_low_but_ask_is_valid(monkeyp
     no_assessment = next(item for item in assessments if item["token_side"] == "no")
 
     assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "accepted"
-    assert no_assessment["reasons"] == []
+    assert no_assessment["status"] == "reprice"
+    assert no_assessment["reasons"] == ["price_below_min"]
     assert no_assessment["quote_context"]["bid"] == 0.01
     assert no_assessment["quote_context"]["ask"] == 0.88
+
+
+def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch):
+    configure_strategy_runtime(monkeypatch)
+    configure_paper_execution_runtime(monkeypatch)
+
+    assessments = strategy.build_candidate_assessments(
+        [
+            {
+                "market_id": "mkt-65-69",
+                "range": [65.0, 69.0],
+                "aggregate_probability": 0.1,
+                "fair_yes": 0.1,
+                "fair_no": 0.9,
+            }
+        ],
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+                "no": {"bid": 0.82, "ask": 0.85, "spread": 0.03, "tick_size": 0.01},
+                "execution_stop_reasons": [],
+            }
+        ],
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-17",
+            "metar": 66.0,
+            "now_ts": "2026-04-18T12:00:00+00:00",
+        },
+    )
+
+    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+
+    assert no_assessment["status"] == "accepted"
+    assert no_assessment["reasons"] == []
+    assert no_assessment["edge"] == 0.07
+
+
+def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypatch):
+    configure_strategy_runtime(monkeypatch)
+    configure_paper_execution_runtime(monkeypatch)
+
+    assessments = strategy.build_candidate_assessments(
+        [
+            {
+                "market_id": "mkt-65-69",
+                "range": [65.0, 69.0],
+                "aggregate_probability": 0.04,
+                "fair_yes": 0.04,
+                "fair_no": 0.96,
+            }
+        ],
+        [
+            {
+                "market_id": "mkt-65-69",
+                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
+                "no": {"bid": 0.61, "ask": 0.75, "spread": 0.14, "tick_size": 0.01},
+                "execution_stop_reasons": [],
+            }
+        ],
+        24,
+        {
+            "city_slug": "nyc",
+            "market_date": "2026-04-17",
+            "metar": 66.0,
+            "now_ts": "2026-04-18T12:00:00+00:00",
+        },
+    )
+
+    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+
+    assert no_assessment["status"] == "reprice"
+    assert no_assessment["reasons"] == ["price_below_min"]
+    assert no_assessment["edge"] == 0.34
 
 
 def test_no_assessment_marks_ask_above_max_as_non_executable(monkeypatch):

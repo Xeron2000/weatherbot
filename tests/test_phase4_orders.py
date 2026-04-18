@@ -193,6 +193,48 @@ def test_build_passive_order_intent_sets_gtd_expiry_and_rejects_unaccepted_route
     assert blocked["reason"] == "route_not_accepted"
 
 
+def test_no_passive_order_intent_uses_same_maker_price_as_assessment_contract():
+    market = make_market()
+    no_reservation = make_reservation(
+        strategy_leg="NO_CARRY",
+        token_side="no",
+        bucket_range=(70.0, 74.0),
+        reserved_worst_loss=30.0,
+    )
+    no_assessment = make_assessment(
+        strategy_leg="NO_CARRY",
+        token_side="no",
+        bucket_range=(70.0, 74.0),
+        bid=0.82,
+        ask=0.85,
+        tick_size=0.01,
+    )
+    market["candidate_assessments"][1] = no_assessment
+    market["market_contracts"].append({"market_id": "mkt-70-74", "range": (70.0, 74.0)})
+    quote_snapshot = make_quote_snapshot()
+    quote_snapshot.append(
+        {
+            "market_id": "mkt-70-74",
+            "yes": {"bid": 0.05, "ask": 0.07, "tick_size": 0.01, "min_order_size": 1.0},
+            "no": {"bid": 0.82, "ask": 0.85, "tick_size": 0.01, "min_order_size": 1.0},
+            "execution_ok": True,
+            "execution_stop_reasons": [],
+        }
+    )
+
+    built = bot_v2.build_passive_order_intent(
+        market,
+        no_reservation,
+        no_assessment,
+        quote_snapshot,
+        "2026-04-17T12:00:00+00:00",
+    )
+
+    assert built["reason"] is None
+    assert built["order"]["limit_price"] == 0.83
+    assert built["order"]["time_in_force"] == "GTD"
+
+
 def test_build_passive_order_intent_returns_deterministic_quote_reasons_without_crossing_spread():
     market = make_market()
     reservation = make_reservation()
