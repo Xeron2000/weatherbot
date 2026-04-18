@@ -1,3 +1,5 @@
+import json
+
 from pathlib import Path
 
 import bot_v2
@@ -34,3 +36,41 @@ def test_modular_config_loader_reads_default_repo_config():
     loaded = config.load_config()
 
     assert loaded == bot_v2._cfg
+
+
+def test_load_config_prefers_visual_crossing_env(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "balance": 10000.0,
+                "vc_key": "json-key",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VISUAL_CROSSING_KEY", "env-key")
+
+    loaded = config.load_config(config_path)
+
+    assert loaded["vc_key"] == "env-key"
+    assert loaded["balance"] == 10000.0
+
+
+def test_load_config_falls_back_to_json_vc_key(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "balance": 10000.0,
+                "vc_key": "json-key",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("VISUAL_CROSSING_KEY", raising=False)
+
+    loaded = config.load_config(config_path)
+
+    assert loaded["vc_key"] == "json-key"
+    assert loaded["balance"] == 10000.0
