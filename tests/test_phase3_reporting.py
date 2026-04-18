@@ -71,11 +71,11 @@ def test_print_status_shows_risk_budget_summary(
 
     assert "Risk usage" in out
     assert "YES_SNIPER" in out
-    assert "NO_CARRY" in out
     assert "budget=3000.00" in out
     assert "reserved=20.00" in out
     assert "available=2980.00" in out
     assert "global_reserved_worst_loss=20.00" in out
+    assert "NO_CARRY" not in out
 
 
 def test_print_report_shows_exposure_and_release_reason_summaries(
@@ -102,6 +102,6 @@ def test_print_report_shows_exposure_and_release_reason_summaries(
     assert "City exposure" in out
     assert "Date exposure" in out
     assert "Event exposure" in out
-    assert "same_bucket_conflict" in out
     assert "candidate_downgraded" in out
     assert "No resolved markets yet." in out
+    assert "NO_CARRY" not in out

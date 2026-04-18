@@ -22,17 +22,6 @@ def make_candidate_assessments():
             "size_multiplier": 0.0,
             "quote_context": {"ask": 0.34, "bid": 0.31, "book_ok": True},
         },
-        {
-            "strategy_leg": "NO_CARRY",
-            "token_side": "no",
-            "range": (65.0, 69.0),
-            "aggregate_probability": 0.18,
-            "fair_price": 0.82,
-            "status": "accepted",
-            "reasons": [],
-            "size_multiplier": 1.0,
-            "quote_context": {"bid": 0.9, "ask": 0.93, "book_ok": True},
-        },
     ]
 
 
@@ -67,10 +56,8 @@ def test_print_status_shows_candidate_assessment_summary(
 
     assert "Candidate assessments" in out
     assert "YES_SNIPER" in out
-    assert "NO_CARRY" in out
     assert "65.0-69.0" in out
     assert "status=reprice" in out
-    assert "status=accepted" in out
     assert "reasons=price_above_max" in out
     assert "fair=0.180" in out
     assert "quote=ask=0.34 bid=0.31" in out
@@ -101,7 +88,6 @@ def test_print_report_shows_candidate_assessments_without_resolved_trades(
 
     assert "Candidate assessments" in out
     assert "YES_SNIPER" in out
-    assert "NO_CARRY" in out
     assert "No resolved markets yet." in out
     assert "resolution_text=" in out
     assert "condition_id=cond-nyc-52-53" in out
@@ -146,4 +132,4 @@ def test_reporting_keeps_trade_stats_separate_from_candidate_counts(
     assert "Resolved:    0" in out
     assert "Accepted scan markets: 1" in out
     assert "Skipped scan markets: 1" in out
-    assert "Candidate assessments: 2" in out
+    assert "Candidate assessments: 1" in out

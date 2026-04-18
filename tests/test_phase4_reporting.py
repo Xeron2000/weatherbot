@@ -182,6 +182,7 @@ def test_print_status_shows_order_lifecycle_summary(
     assert "expired" in out
     assert "active_orders=1" in out
     assert "YES_SNIPER" in out
+    assert "NO_CARRY" not in out
     assert "status=partial" in out
     assert "time_in_force" in out
     assert "limit=0.1100" in out
@@ -212,6 +213,7 @@ def test_print_report_shows_recent_terminal_orders(
     assert "reason=passive_fill_complete" in out
     assert "reason=candidate_downgraded" in out
     assert "reason=expired" in out
+    assert "NO_CARRY" not in out
     assert "updated_at=2026-04-17T12:00:00+00:00" in out
     assert "limit=0.1000" in out
     assert "limit=0.1100" in out
