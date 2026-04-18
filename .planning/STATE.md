@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready
 stopped_at: Completed 05-VERIFICATION.md
-last_updated: "2026-04-18T06:00:45Z"
-last_activity: 2026-04-18 - Completed quick task 260418-j1b: 本地将 NO 概率阈值从 0.95 调到 0.90 并复扫验证
+last_updated: "2026-04-18T07:10:19Z"
+last_activity: 2026-04-18 - Completed quick task 260418-kgq: 增加 NO max_ask 过滤并完成本地扫描验证
 progress:
   total_phases: 6
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 06 (执行复盘与 readiness 报告)
 Plan: Not started
 Status: Phase 05 complete — ready for Phase 06 planning/execution
-Last activity: 2026-04-18 - Completed quick task 260418-j1b: 本地将 NO 概率阈值从 0.95 调到 0.90 并复扫验证
+Last activity: 2026-04-18 - Completed quick task 260418-kgq: 增加 NO max_ask 过滤并完成本地扫描验证
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -131,6 +131,7 @@ None yet.
 | 260418-he3 | 修复 weatherbot 的 NO 候选取价逻辑，避免用 no bid 误判 price_below_min，并验证扫描结果 | 2026-04-18 | 709d509 | Verified | [260418-he3-weatherbot-no-no-bid-price-below-min](./quick/260418-he3-weatherbot-no-no-bid-price-below-min/) |
 | 260418-ilo | 排查 NO 常见 probability_below_min 根因，并本地配置 Visual Crossing secret | 2026-04-18 | local-only | Verified | [260418-ilo-weatherbot-no-probability-below-min-visu](./quick/260418-ilo-weatherbot-no-probability-below-min-visu/) |
 | 260418-j1b | 本地将 NO 概率阈值从 0.95 调到 0.90 并复扫验证 | 2026-04-18 | local-only | Verified | [260418-j1b-no-strategy-min-probability-0-95-0-90-no](./quick/260418-j1b-no-strategy-min-probability-0-95-0-90-no/) |
+| 260418-kgq | 增加 NO max_ask 过滤并完成本地扫描验证 | 2026-04-18 | e2ebd47 | Verified | [260418-kgq-weatherbot-no-max-ask-ask-0-99-edge-no](./quick/260418-kgq-weatherbot-no-max-ask-ask-0-99-edge-no/) |
 
 ## Session Continuity
 
