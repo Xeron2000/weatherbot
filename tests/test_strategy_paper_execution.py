@@ -5,9 +5,7 @@ import weatherbot
 from weatherbot import paper_execution, strategy
 
 
-def configure_strategy_runtime(
-    monkeypatch, no_kelly_fraction=1.0, no_max_size=20.0, no_max_ask=None
-):
+def configure_strategy_runtime(monkeypatch):
     yes_strategy = {
         "max_price": 0.25,
         "min_probability": 0.14,
@@ -17,25 +15,10 @@ def configure_strategy_runtime(
         "max_size": 20.0,
         "min_size": 1.0,
     }
-    no_strategy = {
-        "min_price": 0.65,
-        "min_probability": 0.7,
-        "min_edge": 0.04,
-        "min_hours": 2.0,
-        "max_hours": 72.0,
-        "max_size": no_max_size,
-        "min_size": 1.0,
-    }
-    if no_max_ask is not None:
-        no_strategy["max_ask"] = no_max_ask
     monkeypatch.setattr(strategy, "YES_STRATEGY", yes_strategy)
-    monkeypatch.setattr(strategy, "NO_STRATEGY", no_strategy)
-    monkeypatch.setattr(strategy, "NO_KELLY_FRACTION", no_kelly_fraction, raising=False)
     monkeypatch.setattr(strategy, "KELLY_FRACTION", 0.01)
     monkeypatch.setattr(strategy, "TIMEZONES", {"nyc": "UTC"})
     monkeypatch.setattr(weatherbot, "YES_STRATEGY", yes_strategy)
-    monkeypatch.setattr(weatherbot, "NO_STRATEGY", no_strategy)
-    monkeypatch.setattr(weatherbot, "NO_KELLY_FRACTION", no_kelly_fraction, raising=False)
     monkeypatch.setattr(weatherbot, "KELLY_FRACTION", 0.01, raising=False)
     monkeypatch.setattr(weatherbot, "TIMEZONES", {"nyc": "UTC"})
 
@@ -227,243 +210,54 @@ def test_strategy_assessments_keep_leg_semantics_and_statuses(monkeypatch):
         {"city_slug": "nyc", "market_date": "2026-04-17", "metar": 66.0, "now_ts": "2026-04-18T12:00:00+00:00"},
     )
 
-    yes_assessment = next(item for item in assessments if item["token_side"] == "yes")
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
+    assert len(assessments) == 1
+    yes_assessment = assessments[0]
 
     assert yes_assessment["strategy_leg"] == "YES_SNIPER"
     assert yes_assessment["status"] == "accepted"
     assert yes_assessment["reasons"] == []
-    assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "accepted"
-    assert no_assessment["reasons"] == []
 
 
-def test_no_assessment_anchors_to_fair_value_in_wide_spread_market(monkeypatch):
+def test_route_helpers_keep_yes_reservation_shared_state_shape(monkeypatch):
     configure_strategy_runtime(monkeypatch)
-    configure_paper_execution_runtime(monkeypatch)
-    assessments = strategy.build_candidate_assessments(
-        [
-            {
-                "market_id": "mkt-65-69",
-                "range": [65.0, 69.0],
-                "aggregate_probability": 0.05,
-                "fair_yes": 0.05,
-                "fair_no": 0.95,
-            }
-        ],
-        [
-            {
-                "market_id": "mkt-65-69",
-                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.001, "ask": 0.999, "spread": 0.998, "tick_size": 0.01},
-                "execution_stop_reasons": [],
-            }
-        ],
-        24,
-        {
-            "city_slug": "nyc",
-            "market_date": "2026-04-17",
-            "metar": 66.0,
-            "now_ts": "2026-04-18T12:00:00+00:00",
-        },
-    )
-
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
-
-    assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "accepted"
-    assert no_assessment["reasons"] == []
-    assert no_assessment["edge"] == 0.1
-    assert no_assessment["quote_context"]["bid"] == 0.001
-    assert no_assessment["quote_context"]["ask"] == 0.999
-
-
-def test_no_assessment_uses_passive_target_price_for_edge_and_status(monkeypatch):
-    configure_strategy_runtime(monkeypatch)
-    configure_paper_execution_runtime(monkeypatch)
-
-    assessments = strategy.build_candidate_assessments(
-        [
-            {
-                "market_id": "mkt-65-69",
-                "range": [65.0, 69.0],
-                "aggregate_probability": 0.1,
-                "fair_yes": 0.1,
-                "fair_no": 0.91,
-            }
-        ],
-        [
-            {
-                "market_id": "mkt-65-69",
-                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.82, "ask": 0.85, "spread": 0.03, "tick_size": 0.01},
-                "execution_stop_reasons": [],
-            }
-        ],
-        24,
-        {
-            "city_slug": "nyc",
-            "market_date": "2026-04-17",
-            "metar": 66.0,
-            "now_ts": "2026-04-18T12:00:00+00:00",
-        },
-    )
-
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
-
-    assert no_assessment["status"] == "accepted"
-    assert no_assessment["reasons"] == []
-    assert no_assessment["edge"] == 0.1
-
-
-def test_no_assessment_reprices_when_passive_target_price_is_below_min(monkeypatch):
-    configure_strategy_runtime(monkeypatch)
-    configure_paper_execution_runtime(monkeypatch)
-
-    assessments = strategy.build_candidate_assessments(
-        [
-            {
-                "market_id": "mkt-65-69",
-                "range": [65.0, 69.0],
-                "aggregate_probability": 0.3,
-                "fair_yes": 0.3,
-                "fair_no": 0.7,
-            }
-        ],
-        [
-            {
-                "market_id": "mkt-65-69",
-                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.61, "ask": 0.75, "spread": 0.14, "tick_size": 0.01},
-                "execution_stop_reasons": [],
-            }
-        ],
-        24,
-        {
-            "city_slug": "nyc",
-            "market_date": "2026-04-17",
-            "metar": 66.0,
-            "now_ts": "2026-04-18T12:00:00+00:00",
-        },
-    )
-
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
-
-    assert no_assessment["status"] == "reprice"
-    assert no_assessment["reasons"] == ["price_below_min"]
-    assert no_assessment["edge"] == 0.1
-
-
-def test_no_assessment_marks_ask_above_max_as_non_executable(monkeypatch):
-    configure_strategy_runtime(monkeypatch, no_max_ask=0.95)
-    assessments = strategy.build_candidate_assessments(
-        [
-            {
-                "market_id": "mkt-65-69",
-                "range": [65.0, 69.0],
-                "aggregate_probability": 0.04,
-                "fair_yes": 0.04,
-                "fair_no": 0.96,
-            }
-        ],
-        [
-            {
-                "market_id": "mkt-65-69",
-                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.96, "ask": 0.99, "spread": 0.03, "tick_size": 0.01},
-                "execution_stop_reasons": [],
-            }
-        ],
-        24,
-        {
-            "city_slug": "nyc",
-            "market_date": "2026-04-17",
-            "metar": 66.0,
-            "now_ts": "2026-04-18T12:00:00+00:00",
-        },
-    )
-
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
-
-    assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "reprice"
-    assert no_assessment["reasons"] == ["ask_above_max"]
-    assert no_assessment["quote_context"]["ask"] == 0.99
-
-
-def test_no_assessment_keeps_valid_no_ask_executable_under_max_ask(monkeypatch):
-    configure_strategy_runtime(monkeypatch, no_max_ask=0.95)
-    assessments = strategy.build_candidate_assessments(
-        [
-            {
-                "market_id": "mkt-65-69",
-                "range": [65.0, 69.0],
-                "aggregate_probability": 0.04,
-                "fair_yes": 0.04,
-                "fair_no": 0.96,
-            }
-        ],
-        [
-            {
-                "market_id": "mkt-65-69",
-                "yes": {"ask": 0.11, "bid": 0.09, "spread": 0.02},
-                "no": {"bid": 0.85, "ask": 0.88, "spread": 0.03, "tick_size": 0.01},
-                "execution_stop_reasons": [],
-            }
-        ],
-        24,
-        {
-            "city_slug": "nyc",
-            "market_date": "2026-04-17",
-            "metar": 66.0,
-            "now_ts": "2026-04-18T12:00:00+00:00",
-        },
-    )
-
-    no_assessment = next(item for item in assessments if item["token_side"] == "no")
-
-    assert no_assessment["strategy_leg"] == "NO_CARRY"
-    assert no_assessment["status"] == "accepted"
-    assert no_assessment["reasons"] == []
-    assert no_assessment["quote_context"]["ask"] == 0.88
-
-
-def test_no_passive_order_shares_scale_with_reserved_worst_loss_only(monkeypatch):
-    configure_strategy_runtime(monkeypatch, no_kelly_fraction=1.5, no_max_size=30.0)
-    configure_paper_execution_runtime(monkeypatch)
-    market = make_market()
-    assessment = make_assessment(token_side="no")
-    no_reservation = {
-        "strategy_leg": "NO_CARRY",
-        "reserved_worst_loss": strategy.candidate_worst_loss(
-            {
-                "strategy_leg": "NO_CARRY",
-                "token_side": "no",
-                "size_multiplier": 0.5,
-            },
-            10000.0,
-        ),
+    decision = {
+        "strategy_leg": "YES_SNIPER",
+        "token_side": "yes",
+        "range": [65.0, 69.0],
+        "status": "accepted",
+        "reserved_worst_loss": 20.0,
+        "budget_bucket": "YES_SNIPER",
+        "reasons": [],
+        "exposure_keys": strategy.build_exposure_keys(make_market(), assessment={"range": [65.0, 69.0]}),
     }
-    baseline_reservation = {
-        "strategy_leg": "NO_CARRY",
-        "reserved_worst_loss": 15.0,
-    }
-    ts = "2026-04-18T12:00:00+00:00"
 
-    baseline = paper_execution.build_passive_order_intent(
-        market, baseline_reservation, assessment, make_quote_snapshot(), ts
+    reservation = strategy.build_reserved_exposure(
+        make_market(),
+        decision,
+        "2026-04-18T12:00:00+00:00",
     )
-    scaled = paper_execution.build_passive_order_intent(
-        market, no_reservation, assessment, make_quote_snapshot(), ts
+    risk_state = strategy.build_empty_risk_state(
+        10000.0,
+        {
+            "yes_budget_pct": 0.3,
+            "no_budget_pct": 0.7,
+            "yes_leg_cap_pct": 0.3,
+            "no_leg_cap_pct": 0.7,
+            "global_usage_cap_pct": 1.0,
+            "per_market_cap_pct": 1.0,
+            "per_city_cap_pct": 1.0,
+            "per_date_cap_pct": 1.0,
+            "per_event_cap_pct": 1.0,
+        },
     )
 
-    assert baseline["reason"] is None
-    assert scaled["reason"] is None
-    assert no_reservation["reserved_worst_loss"] == 22.5
-    assert baseline["order"]["shares"] == 20.8333
-    assert scaled["order"]["shares"] == 31.25
-    assert scaled["order"]["time_in_force"] == "GTC"
-    assert scaled["order"]["expires_at"] is None
+    strategy.apply_reservation_to_risk_state(risk_state, reservation)
+
+    assert reservation["strategy_leg"] == "YES_SNIPER"
+    assert reservation["token_side"] == "yes"
+    assert reservation["reserved_worst_loss"] == 20.0
+    assert risk_state["legs"]["YES_SNIPER"]["reserved"] == 20.0
+    assert risk_state["active_reservations"][0]["token_side"] == "yes"
 
 
 def test_build_exposure_keys_stays_stable_for_market_dict_and_primitives():

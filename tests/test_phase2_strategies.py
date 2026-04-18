@@ -114,20 +114,6 @@ def test_yes_evaluator_uses_yes_strategy_thresholds_only(monkeypatch):
             "min_size": 1.0,
         },
     )
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.9,
-            "min_probability": 0.95,
-            "min_edge": 0.2,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
     result = bot_v2.evaluate_yes_candidate(
         make_bucket_probability(0.18), make_quote_snapshot(yes_ask=0.11), 24
     )
@@ -136,149 +122,7 @@ def test_yes_evaluator_uses_yes_strategy_thresholds_only(monkeypatch):
     assert result["status"] == "accepted"
 
 
-def test_no_evaluator_uses_no_strategy_thresholds_only(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "YES_STRATEGY",
-        {
-            "max_price": 0.2,
-            "min_probability": 0.3,
-            "min_edge": 0.2,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
-    result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.18),
-        make_quote_snapshot(no_bid=0.9, no_ask=0.74),
-        24,
-    )
-
-    assert result["strategy_leg"] == "NO_CARRY"
-    assert result["status"] == "accepted"
-
-
-def test_no_evaluator_uses_no_ask_for_price_floor_and_edge(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
-    result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.04),
-        make_quote_snapshot(no_bid=0.01, no_ask=0.88),
-        24,
-    )
-
-    assert "price_below_min" not in result["reasons"]
-    assert result["status"] == "accepted"
-    assert result["edge"] == 0.08
-
-
-def test_no_evaluator_reprices_when_no_ask_is_below_min_price(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
-    result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.04),
-        make_quote_snapshot(no_bid=0.9, no_ask=0.64),
-        24,
-    )
-
-    assert result["status"] == "reprice"
-    assert "price_below_min" in result["reasons"]
-
-
-def test_no_evaluator_reprices_when_no_ask_exceeds_max_ask(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "max_ask": 0.95,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
-    result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.04),
-        make_quote_snapshot(no_bid=0.96, no_ask=0.99),
-        24,
-    )
-
-    assert result["status"] == "reprice"
-    assert "ask_above_max" in result["reasons"]
-    assert result["size_multiplier"] == 0.0
-
-
-def test_no_evaluator_keeps_backward_compatibility_without_max_ask(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
-    result = bot_v2.evaluate_no_candidate(
-        make_bucket_probability(0.04),
-        make_quote_snapshot(no_bid=0.96, no_ask=0.99),
-        24,
-    )
-
-    assert result["status"] == "rejected"
-    assert "ask_above_max" not in result["reasons"]
-    assert result["edge"] == -0.03
-
-
-def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
+def test_build_candidate_assessments_returns_yes_only_records(monkeypatch):
     monkeypatch.setattr(
         bot_v2,
         "YES_STRATEGY",
@@ -292,46 +136,19 @@ def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
             "min_size": 1.0,
         },
     )
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
+    bucket = make_bucket_probability(0.18)
+    assessments = bot_v2.build_candidate_assessments(
+        [bucket], [make_quote_snapshot(yes_ask=0.2, no_bid=0.9, no_ask=0.74)], 24
     )
 
-    bucket = make_bucket_probability(0.18)
-    quote = make_quote_snapshot(yes_ask=0.2, no_bid=0.9, no_ask=0.74)
-
-    yes_result = bot_v2.evaluate_yes_candidate(bucket, quote, 24)
-    no_result = bot_v2.evaluate_no_candidate(bucket, quote, 24)
-
-    assert yes_result["status"] == "reprice"
-    assert "price_above_max" in yes_result["reasons"]
-    assert no_result["status"] == "accepted"
+    assert len(assessments) == 1
+    assert assessments[0]["strategy_leg"] == "YES_SNIPER"
+    assert assessments[0]["token_side"] == "yes"
+    assert assessments[0]["status"] == "reprice"
+    assert "price_above_max" in assessments[0]["reasons"]
 
 
 def test_yes_peak_window_penalty_uses_city_local_time_not_utc(monkeypatch):
-    monkeypatch.setattr(
-        bot_v2,
-        "YES_STRATEGY",
-        {
-            "max_price": 0.25,
-            "min_probability": 0.14,
-            "min_edge": 0.03,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
     bucket = make_bucket_probability(0.18)
     quote = make_quote_snapshot(yes_ask=0.11)
 
@@ -398,7 +215,7 @@ def test_yes_peak_window_penalty_skips_non_same_day_market(monkeypatch):
     assert result["status"] == "accepted"
 
 
-def test_yes_peak_window_penalty_does_not_touch_no_candidate(monkeypatch):
+def test_yes_peak_window_penalty_preserves_yes_only_rejection(monkeypatch):
     monkeypatch.setattr(
         bot_v2,
         "YES_STRATEGY",
@@ -412,20 +229,6 @@ def test_yes_peak_window_penalty_does_not_touch_no_candidate(monkeypatch):
             "min_size": 1.0,
         },
     )
-    monkeypatch.setattr(
-        bot_v2,
-        "NO_STRATEGY",
-        {
-            "min_price": 0.65,
-            "min_probability": 0.7,
-            "min_edge": 0.04,
-            "min_hours": 2.0,
-            "max_hours": 72.0,
-            "max_size": 20.0,
-            "min_size": 1.0,
-        },
-    )
-
     bucket = make_bucket_probability(0.18)
     quote = make_quote_snapshot(yes_ask=0.11, no_bid=0.9, no_ask=0.74)
     market_context = {
@@ -435,16 +238,18 @@ def test_yes_peak_window_penalty_does_not_touch_no_candidate(monkeypatch):
         "now_ts": "2026-04-18T21:30:00+00:00",
     }
 
-    yes_result = bot_v2.evaluate_yes_candidate(bucket, quote, 24, market_context)
-    no_result = bot_v2.evaluate_no_candidate(bucket, quote, 24)
+    assessments = bot_v2.build_candidate_assessments(
+        [bucket], [quote], 24, market_context
+    )
+    yes_result = assessments[0]
 
     assert yes_result["probability_penalty_factor"] == 0.35
     assert yes_result["status"] == "rejected"
-    assert no_result["status"] == "accepted"
-    assert "yes_peak_window_metar_near_bucket_ceiling" not in no_result["reasons"]
+    assert len(assessments) == 1
+    assert yes_result["strategy_leg"] == "YES_SNIPER"
 
 
-def test_scan_and_update_persists_dual_candidate_assessments(
+def test_scan_and_update_persists_yes_only_candidate_assessments(
     phase2_gamma_event,
     phase2_weather_snapshot,
     phase2_clob_book_yes,
@@ -531,23 +336,11 @@ def test_scan_and_update_persists_dual_candidate_assessments(
     market = bot_v2.load_market(city, target_date)
 
     assert {item["strategy_leg"] for item in market["candidate_assessments"]} == {
-        "YES_SNIPER",
-        "NO_CARRY",
+        "YES_SNIPER"
     }
-    yes_item = next(
-        item
-        for item in market["candidate_assessments"]
-        if item["strategy_leg"] == "YES_SNIPER"
-    )
-    no_item = next(
-        item
-        for item in market["candidate_assessments"]
-        if item["strategy_leg"] == "NO_CARRY"
-    )
+    yes_item = market["candidate_assessments"][0]
     assert yes_item["quote_context"]["ask"] == 0.34
-    assert no_item["quote_context"]["bid"] == 0.66
     assert yes_item["status"] in {"accepted", "rejected", "size_down", "reprice"}
-    assert no_item["status"] in {"accepted", "rejected", "size_down", "reprice"}
 
 
 def test_execution_rejects_are_persisted_in_candidate_assessments(monkeypatch):

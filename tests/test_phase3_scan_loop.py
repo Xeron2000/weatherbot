@@ -116,7 +116,6 @@ def test_scan_and_update_persists_route_decisions_and_risk_state(
         "build_candidate_assessments",
         lambda *_args, **_kwargs: [
             make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09),
-            make_assessment("NO_CARRY", "no", (65.0, 69.0), 0.08),
         ],
     )
 
@@ -137,10 +136,9 @@ def test_scan_and_update_persists_route_decisions_and_risk_state(
     assert market["reserved_exposure"]["strategy_leg"] == "YES_SNIPER"
     assert market["route_decisions"][0]["budget_bucket"] == "YES_SNIPER"
     assert market["route_decisions"][0]["status"] == "accepted"
-    assert any(
-        item["status"] == "rejected" and "same_bucket_conflict" in item["reasons"]
-        for item in market["route_decisions"]
-    )
+    assert {item["strategy_leg"] for item in market["route_decisions"]} == {
+        "YES_SNIPER"
+    }
 
 
 def test_scan_and_update_routes_within_leg_by_edge_before_global_cap(
@@ -253,7 +251,6 @@ def test_same_bucket_conflict_keeps_existing_reservation(
         [make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09)],
         [
             make_assessment("YES_SNIPER", "yes", (65.0, 69.0), 0.09),
-            make_assessment("NO_CARRY", "no", (65.0, 69.0), 0.08),
         ],
     ]
     monkeypatch.setattr(
@@ -270,7 +267,6 @@ def test_same_bucket_conflict_keeps_existing_reservation(
 
     assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
     assert market["reserved_exposure"]["strategy_leg"] == "YES_SNIPER"
-    assert any(
-        item["status"] == "rejected" and "same_bucket_conflict" in item["reasons"]
-        for item in market["route_decisions"]
-    )
+    assert {item["strategy_leg"] for item in market["route_decisions"]} == {
+        "YES_SNIPER"
+    }
