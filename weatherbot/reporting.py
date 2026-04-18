@@ -31,6 +31,8 @@ def print_candidate_assessments(markets):
     entries = []
     for m in sorted(markets, key=lambda x: (x.get("date", ""), x.get("city", ""))):
         for assessment in m.get("candidate_assessments", []) or []:
+            if assessment.get("strategy_leg") != "YES_SNIPER":
+                continue
             entries.append((m, assessment))
 
     if not entries:
@@ -99,7 +101,7 @@ def print_risk_summary(state):
     usage_pct = (global_reserved / bankroll * 100.0) if bankroll else 0.0
 
     print(f"\n  Risk usage")
-    for leg in ["YES_SNIPER", "NO_CARRY"]:
+    for leg in ["YES_SNIPER"]:
         leg_state = (risk_state.get("legs", {}) or {}).get(leg, {}) or {}
         budget = float(leg_state.get("budget", 0.0) or 0.0)
         reserved = float(leg_state.get("reserved", 0.0) or 0.0)
@@ -137,6 +139,8 @@ def print_route_decision_summary(markets):
 
     for market in markets:
         for decision in market.get("route_decisions", []) or []:
+            if decision.get("strategy_leg") != "YES_SNIPER":
+                continue
             status = decision.get("status")
             if status == "accepted":
                 accepted += 1
@@ -145,7 +149,11 @@ def print_route_decision_summary(markets):
             for reason in decision.get("reasons", []) or []:
                 reason_counts[reason] = reason_counts.get(reason, 0) + 1
         reservation = market.get("reserved_exposure")
-        if reservation and reservation.get("release_reason"):
+        if (
+            reservation
+            and reservation.get("strategy_leg") == "YES_SNIPER"
+            and reservation.get("release_reason")
+        ):
             released += 1
             reason = reservation.get("release_reason")
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
@@ -173,7 +181,12 @@ def collect_active_order_facts(markets):
     for market in sorted(markets, key=lambda x: (x.get("date", ""), x.get("city", ""))):
         ensure_market_order_defaults(market)
         active_order = market.get("active_order")
-        if active_order and is_order_unfinished(active_order):
+        if (
+            active_order
+            and active_order.get("strategy_leg") == "YES_SNIPER"
+            and active_order.get("token_side") == "yes"
+            and is_order_unfinished(active_order)
+        ):
             active_orders.append((market, active_order))
     return active_orders
 
@@ -182,6 +195,8 @@ def collect_recent_terminal_orders(markets, limit=10):
     for market in markets or []:
         ensure_market_order_defaults(market)
         for order in market.get("order_history", []) or []:
+            if order.get("strategy_leg") != "YES_SNIPER" or order.get("token_side") != "yes":
+                continue
             if not is_order_terminal(order):
                 continue
             terminal_orders.append((market, order))
@@ -426,17 +441,30 @@ def print_replay(limit=5, market_filter=None, order_filter=None):
             print(format_replay_event_line(event))
 
 def print_order_summary(state, markets):
-    order_state = state.get("order_state") or {}
-    status_counts = order_state.get("status_counts") or {}
-    active_count = len(order_state.get("active_orders") or [])
     active_orders = collect_active_order_facts(markets)
     terminal_orders = collect_recent_terminal_orders(markets)
     terminal_reason_summary = summarize_terminal_order_reasons(markets)
+    status_counts = {
+        "planned": 0,
+        "working": 0,
+        "partial": 0,
+        "filled": 0,
+        "canceled": 0,
+        "expired": 0,
+    }
+    for _, order in active_orders:
+        status = order.get("status")
+        if status in status_counts:
+            status_counts[status] += 1
+    for _, order in terminal_orders:
+        status = order.get("status")
+        if status in status_counts:
+            status_counts[status] += 1
 
     print(f"\n  Order lifecycle")
     print(
         "    "
-        f"active_orders={active_count} "
+        f"active_orders={len(active_orders)} "
         f"planned={int(status_counts.get('planned', 0) or 0)} "
         f"working={int(status_counts.get('working', 0) or 0)} "
         f"partial={int(status_counts.get('partial', 0) or 0)} "
@@ -642,4 +670,3 @@ def print_report():
         )
 
     print(f"{'=' * 55}\n")
-
