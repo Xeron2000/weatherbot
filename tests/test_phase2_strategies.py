@@ -225,6 +225,59 @@ def test_no_evaluator_reprices_when_no_ask_is_below_min_price(monkeypatch):
     assert "price_below_min" in result["reasons"]
 
 
+def test_no_evaluator_reprices_when_no_ask_exceeds_max_ask(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "max_ask": 0.95,
+            "min_probability": 0.7,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_no_candidate(
+        make_bucket_probability(0.04),
+        make_quote_snapshot(no_bid=0.96, no_ask=0.99),
+        24,
+    )
+
+    assert result["status"] == "reprice"
+    assert "ask_above_max" in result["reasons"]
+    assert result["size_multiplier"] == 0.0
+
+
+def test_no_evaluator_keeps_backward_compatibility_without_max_ask(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "NO_STRATEGY",
+        {
+            "min_price": 0.65,
+            "min_probability": 0.7,
+            "min_edge": 0.04,
+            "min_hours": 2.0,
+            "max_hours": 72.0,
+            "max_size": 20.0,
+            "min_size": 1.0,
+        },
+    )
+
+    result = bot_v2.evaluate_no_candidate(
+        make_bucket_probability(0.04),
+        make_quote_snapshot(no_bid=0.96, no_ask=0.99),
+        24,
+    )
+
+    assert result["status"] == "rejected"
+    assert "ask_above_max" not in result["reasons"]
+    assert result["edge"] == -0.03
+
+
 def test_same_bucket_can_reject_yes_but_accept_no(monkeypatch):
     monkeypatch.setattr(
         bot_v2,
