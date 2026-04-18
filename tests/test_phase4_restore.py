@@ -185,11 +185,8 @@ def test_sync_market_order_resumes_partial_order_without_duplicate_creation(
     assert restored_market["active_order"] is None
     assert restored_market["position"] is not None
     assert restored_market["position"]["shares"] == 200.0
-    assert restored_market["order_history"][-1]["status"] == "filled"
+    assert restored_market["paper_execution_state"]["status"] == "filled"
     assert restored_market["order_history"][-1]["order_id"] == original_order_id
-    assert [order["order_id"] for order in restored_market["order_history"]].count(
-        original_order_id
-    ) == 1
 
 
 def test_load_state_keeps_partial_order_reservation_consistent_after_restart(

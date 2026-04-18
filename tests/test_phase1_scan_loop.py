@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timezone
 
 import bot_v2 as weatherbot
 
@@ -48,7 +49,8 @@ def patch_scan_inputs(monkeypatch, city_events, city_snapshots):
         return snapshots
 
     def fake_get_polymarket_event(city_slug, month, day, year):
-        return city_events.get((city_slug, f"{year:04d}-{day:02d}"))
+        month_num = month if isinstance(month, int) else (weatherbot.MONTHS.index(month) + 1)
+        return city_events.get((city_slug, f"{year:04d}-{month_num:02d}-{day:02d}"))
 
     monkeypatch.setattr(
         weatherbot, "take_forecast_snapshot", fake_take_forecast_snapshot
@@ -56,12 +58,26 @@ def patch_scan_inputs(monkeypatch, city_events, city_snapshots):
     monkeypatch.setattr(weatherbot, "get_polymarket_event", fake_get_polymarket_event)
 
 
+def freeze_bot_now(monkeypatch, ts):
+    frozen = datetime.fromisoformat(ts)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen
+            return frozen.astimezone(tz)
+
+    monkeypatch.setattr(weatherbot, "datetime", FrozenDateTime)
+
+
 def test_scan_and_update_marks_skipped_market_with_explicit_reason(
     phase1_gamma_event, phase1_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
-    target_date = "2026-04-17"
+    target_date = phase1_gamma_event["endDate"][:10]
     city = "nyc"
+    freeze_bot_now(monkeypatch, "2026-04-16T12:00:00+00:00")
     event = copy.deepcopy(phase1_gamma_event)
     event["rules"] = event["rules"].replace("°F", "°C")
     loc = copy.deepcopy(weatherbot.LOCATIONS[city])
@@ -69,7 +85,7 @@ def test_scan_and_update_marks_skipped_market_with_explicit_reason(
     monkeypatch.setattr(weatherbot, "LOCATIONS", {city: loc})
     patch_scan_inputs(
         monkeypatch,
-        {(city, "2026-17"): event},
+        {(city, target_date): event},
         {city: {target_date: phase1_weather_snapshot["fresh"]}},
     )
 
@@ -86,14 +102,15 @@ def test_scan_and_update_persists_semantic_contracts_for_admissible_market(
     phase1_gamma_event, phase1_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
-    target_date = "2026-04-17"
+    target_date = phase1_gamma_event["endDate"][:10]
     city = "nyc"
+    freeze_bot_now(monkeypatch, "2026-04-16T12:00:00+00:00")
     loc = copy.deepcopy(weatherbot.LOCATIONS[city])
 
     monkeypatch.setattr(weatherbot, "LOCATIONS", {city: loc})
     patch_scan_inputs(
         monkeypatch,
-        {(city, "2026-17"): phase1_gamma_event},
+        {(city, target_date): phase1_gamma_event},
         {city: {target_date: phase1_weather_snapshot["fresh"]}},
     )
 
@@ -111,7 +128,7 @@ def test_scan_loop_continues_after_rejecting_one_market(
     phase1_gamma_event, phase1_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
-    target_date = "2026-04-17"
+    target_date = phase1_gamma_event["endDate"][:10]
     bad_event = copy.deepcopy(phase1_gamma_event)
     bad_event["rules"] = bad_event["rules"].replace("°F", "°C")
     good_event = copy.deepcopy(phase1_gamma_event)
@@ -140,11 +157,12 @@ def test_scan_loop_continues_after_rejecting_one_market(
             "chicago": copy.deepcopy(weatherbot.LOCATIONS["chicago"]),
         },
     )
+    freeze_bot_now(monkeypatch, "2026-04-16T12:00:00+00:00")
     patch_scan_inputs(
         monkeypatch,
         {
-            ("nyc", "2026-17"): bad_event,
-            ("chicago", "2026-17"): good_event,
+            ("nyc", target_date): bad_event,
+            ("chicago", target_date): good_event,
         },
         {
             "nyc": {target_date: phase1_weather_snapshot["fresh"]},

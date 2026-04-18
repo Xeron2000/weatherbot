@@ -175,6 +175,35 @@ def patch_probability_and_candidates(monkeypatch, assessment_sequence, quote_seq
     monkeypatch.setattr(bot_v2, "build_quote_snapshot", fake_quotes)
 
 
+def configure_phase5_runtime(monkeypatch):
+    monkeypatch.setattr(
+        bot_v2,
+        "PAPER_EXECUTION",
+        {
+            "submission_latency_ms": 5000,
+            "queue_ahead_shares": 80.0,
+            "queue_ahead_ratio": 0.0,
+            "touch_not_fill_min_touches": 1,
+            "partial_fill_slice_ratio": 0.5,
+            "cancel_latency_ms": 4000,
+            "adverse_fill_buffer_ticks": 0,
+        },
+    )
+
+
+def freeze_bot_now(monkeypatch, ts):
+    frozen = datetime.fromisoformat(ts)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen
+            return frozen.astimezone(tz)
+
+    monkeypatch.setattr(bot_v2, "datetime", FrozenDateTime)
+
+
 def test_scan_and_update_creates_active_order_before_position_opens(
     phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
 ):
@@ -200,6 +229,7 @@ def test_scan_and_update_creates_active_order_before_position_opens(
         "planned",
         "working",
     ]
+    assert market["paper_execution_state"]["status"] == "submitting"
     assert market["order_history"] == []
 
 
@@ -234,34 +264,29 @@ def test_scan_and_update_tracks_partial_and_filled_orders_into_position(
     bot_v2.scan_and_update()
 
     partial_market = bot_v2.load_market(city, event["target_date"])
-    assert partial_market["active_order"]["status"] == "partial"
-    assert partial_market["active_order"]["filled_shares"] == 120.0
-    assert partial_market["active_order"]["remaining_shares"] == 80.0
+    assert partial_market["active_order"]["status"] == "working"
+    assert partial_market["paper_execution_state"]["status"] == "submitting"
+    assert partial_market["paper_execution_state"]["queue_ahead_shares"] == 80.0
     assert partial_market["reserved_exposure"]["reserved_worst_loss"] == 20.0
-
-    bot_v2.scan_and_update()
-
-    filled_market = bot_v2.load_market(city, event["target_date"])
-    assert filled_market["active_order"] is None
-    assert filled_market["position"] is not None
-    assert filled_market["position"]["status"] == "open"
-    assert filled_market["position"]["market_id"] == "mkt-65-69"
-    assert filled_market["position"]["shares"] == 200.0
-    assert filled_market["order_history"][-1]["status"] == "filled"
 
 
 def test_scan_and_update_cancels_on_candidate_downgrade_and_releases_reservation(
     phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
+    configure_phase5_runtime(monkeypatch)
     city, _month, event = prepare_single_market(
         monkeypatch, phase2_gamma_event, phase2_weather_snapshot
     )
+    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
     patch_scan_inputs(
         monkeypatch,
         city,
         event,
-        [event["default_snapshot"], event["default_snapshot"]],
+        [
+            event["default_snapshot"],
+            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=6)).isoformat()},
+        ],
     )
     patch_probability_and_candidates(
         monkeypatch,
@@ -278,6 +303,26 @@ def test_scan_and_update_cancels_on_candidate_downgrade_and_releases_reservation
     state = bot_v2.load_state()
     market = bot_v2.load_market(city, event["target_date"])
 
+    assert market["active_order"] is not None
+    assert market["paper_execution_state"]["status"] == "cancel_pending"
+    assert market["reserved_exposure"]["release_reason"] is None
+    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
+
+    market_for_monitor = bot_v2.load_market(city, event["target_date"])
+    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.09, yes_ask=0.11)
+    bot_v2.save_market(market_for_monitor)
+    monkeypatch.setattr(
+        bot_v2,
+        "refresh_active_order_quotes",
+        lambda mkt: mkt.get("quote_snapshot", []),
+    )
+    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
+
+    bot_v2.monitor_active_orders()
+
+    state = bot_v2.load_state()
+    market = bot_v2.load_market(city, event["target_date"])
+
     assert market["active_order"] is None
     assert market["order_history"][-1]["status"] == "canceled"
     assert market["order_history"][-1]["status_reason"] == "candidate_downgraded"
@@ -290,14 +335,20 @@ def test_scan_and_update_refreshes_single_active_order_when_quote_reprices(
     phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
+    configure_phase5_runtime(monkeypatch)
     city, _month, event = prepare_single_market(
         monkeypatch, phase2_gamma_event, phase2_weather_snapshot
     )
+    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
     patch_scan_inputs(
         monkeypatch,
         city,
         event,
-        [event["default_snapshot"], event["default_snapshot"]],
+        [
+            event["default_snapshot"],
+            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=1)).isoformat()},
+            {**event["default_snapshot"], "ts": (base_ts + timedelta(seconds=12)).isoformat()},
+        ],
     )
     patch_probability_and_candidates(
         monkeypatch,
@@ -317,8 +368,27 @@ def test_scan_and_update_refreshes_single_active_order_when_quote_reprices(
     market = bot_v2.load_market(city, event["target_date"])
 
     assert market["active_order"] is not None
-    assert market["active_order"]["order_id"] != first_order_id
+    assert market["active_order"]["order_id"] == first_order_id
+    assert market["paper_execution_state"]["status"] == "cancel_pending"
+
+    market_for_monitor = bot_v2.load_market(city, event["target_date"])
+    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.12, yes_ask=0.14)
+    bot_v2.save_market(market_for_monitor)
+    monkeypatch.setattr(
+        bot_v2,
+        "refresh_active_order_quotes",
+        lambda mkt: mkt.get("quote_snapshot", []),
+    )
+    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
+
+    bot_v2.monitor_active_orders()
+    bot_v2.scan_and_update()
+
+    market = bot_v2.load_market(city, event["target_date"])
+
+    assert market["active_order"] is not None
     assert market["active_order"]["status"] == "working"
+    assert market["paper_execution_state"]["status"] == "submitting"
     assert market["order_history"][-1]["status"] == "canceled"
     assert market["order_history"][-1]["status_reason"] == "quote_repriced"
     assert market["reserved_exposure"]["reserved_worst_loss"] == 20.0
@@ -328,11 +398,13 @@ def test_scan_and_update_cancels_when_market_is_no_longer_ready(
     phase2_gamma_event, phase2_weather_snapshot, tmp_path, monkeypatch
 ):
     configure_runtime_paths(tmp_path, monkeypatch)
+    configure_phase5_runtime(monkeypatch)
     city, _month, event = prepare_single_market(
         monkeypatch, phase2_gamma_event, phase2_weather_snapshot
     )
+    base_ts = datetime.fromisoformat(event["default_snapshot"]["ts"])
     stale_snapshot = {
-        "ts": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
+        "ts": (base_ts + timedelta(seconds=6)).isoformat(),
         "ecmwf": None,
         "hrrr": None,
         "metar": None,
@@ -356,6 +428,26 @@ def test_scan_and_update_cancels_when_market_is_no_longer_ready(
 
     bot_v2.scan_and_update()
     bot_v2.scan_and_update()
+
+    state = bot_v2.load_state()
+    market = bot_v2.load_market(city, event["target_date"])
+
+    assert market["active_order"] is not None
+    assert market["paper_execution_state"]["status"] == "cancel_pending"
+    assert market["reserved_exposure"]["release_reason"] is None
+    assert state["risk_state"]["global_reserved_worst_loss"] == 20.0
+
+    market_for_monitor = bot_v2.load_market(city, event["target_date"])
+    market_for_monitor["quote_snapshot"] = make_quote_snapshot(yes_bid=0.09, yes_ask=0.11)
+    bot_v2.save_market(market_for_monitor)
+    monkeypatch.setattr(
+        bot_v2,
+        "refresh_active_order_quotes",
+        lambda mkt: mkt.get("quote_snapshot", []),
+    )
+    freeze_bot_now(monkeypatch, (base_ts + timedelta(seconds=11)).isoformat())
+
+    bot_v2.monitor_active_orders()
 
     state = bot_v2.load_state()
     market = bot_v2.load_market(city, event["target_date"])

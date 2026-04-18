@@ -20,6 +20,7 @@ import time
 import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # =============================================================================
 # CONFIG
@@ -172,6 +173,10 @@ MAX_PRICE = YES_STRATEGY.get("max_price", _cfg.get("max_price", 0.45))
 
 SIGMA_F = 2.0
 SIGMA_C = 1.2
+
+YES_PEAK_WINDOW_END_HOUR = 15
+YES_PEAK_WINDOW_NEAR_BUFFER = 1.0
+YES_PEAK_WINDOW_PENALTY = 0.35
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
@@ -407,6 +412,71 @@ def normalize_probability_weights(weights):
     if total <= 0:
         return []
     return [w / total for w in weights]
+
+
+def get_local_now(city_slug, now_ts=None):
+    tz_name = TIMEZONES.get(city_slug, "UTC")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = timezone.utc
+
+    if now_ts:
+        try:
+            parsed = datetime.fromisoformat(str(now_ts).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(tz)
+        except Exception:
+            pass
+
+    return datetime.now(timezone.utc).astimezone(tz)
+
+
+def assess_yes_peak_window_penalty(bucket_probability, market_context=None):
+    context = market_context or {}
+    city_slug = context.get("city_slug")
+    market_date = context.get("market_date")
+    metar_temp = context.get("metar")
+    rng = bucket_probability.get("range") if bucket_probability else None
+
+    result = {
+        "applied": False,
+        "penalty_factor": 1.0,
+        "reason": None,
+        "local_time": None,
+    }
+
+    if not city_slug or not market_date or metar_temp is None or not rng:
+        return result
+    if rng[0] == -999 or rng[1] == 999:
+        return result
+
+    local_now = get_local_now(city_slug, context.get("now_ts"))
+    result["local_time"] = local_now.isoformat()
+    if market_date != local_now.strftime("%Y-%m-%d"):
+        return result
+    if local_now.hour < YES_PEAK_WINDOW_END_HOUR:
+        return result
+
+    try:
+        observed = float(metar_temp)
+        t_low, t_high = rng
+    except Exception:
+        return result
+
+    if observed > float(t_high):
+        result["applied"] = True
+        result["penalty_factor"] = 0.0
+        result["reason"] = "yes_peak_window_metar_above_bucket"
+        return result
+
+    if observed >= float(t_high) - YES_PEAK_WINDOW_NEAR_BUFFER:
+        result["applied"] = True
+        result["penalty_factor"] = YES_PEAK_WINDOW_PENALTY
+        result["reason"] = "yes_peak_window_metar_near_bucket_ceiling"
+
+    return result
 
 
 def get_source_sigma(city_slug, source, source_sigmas=None):
@@ -1051,10 +1121,19 @@ def determine_size_multiplier(edge, min_edge):
     return 0.0, "rejected"
 
 
-def evaluate_yes_candidate(bucket_probability, quote_snapshot, hours):
+def evaluate_yes_candidate(
+    bucket_probability, quote_snapshot, hours, market_context=None
+):
     reasons = []
     quote = quote_for_side(quote_snapshot, "yes")
-    fair_price = bucket_probability.get("fair_yes")
+    raw_probability = float(bucket_probability.get("aggregate_probability", 0.0) or 0.0)
+    peak_window_penalty = assess_yes_peak_window_penalty(
+        bucket_probability, market_context
+    )
+    adjusted_probability = round(
+        raw_probability * peak_window_penalty.get("penalty_factor", 1.0), 6
+    )
+    fair_price = adjusted_probability
     ask = quote.get("ask")
     reasons.extend(
         missing_strategy_fields(
@@ -1079,9 +1158,9 @@ def evaluate_yes_candidate(bucket_probability, quote_snapshot, hours):
         reasons.append("missing_quote_price")
     if ask is not None and ask > YES_STRATEGY.get("max_price", 1.0):
         reasons.append("price_above_max")
-    if bucket_probability.get("aggregate_probability", 0.0) < YES_STRATEGY.get(
-        "min_probability", 0.0
-    ):
+    if peak_window_penalty.get("applied") and peak_window_penalty.get("reason"):
+        reasons.append(peak_window_penalty["reason"])
+    if adjusted_probability < YES_STRATEGY.get("min_probability", 0.0):
         reasons.append("probability_below_min")
 
     edge = round((fair_price or 0.0) - (ask or 0.0), 6) if ask is not None else None
@@ -1104,14 +1183,18 @@ def evaluate_yes_candidate(bucket_probability, quote_snapshot, hours):
         "token_side": "yes",
         "range": bucket_probability.get("range"),
         "aggregate_probability": bucket_probability.get("aggregate_probability"),
+        "adjusted_probability": adjusted_probability,
         "fair_price": fair_price,
-        "fair_yes": bucket_probability.get("fair_yes"),
+        "fair_yes": fair_price,
         "fair_no": bucket_probability.get("fair_no"),
         "quote_context": quote,
         "status": status,
         "reasons": normalize_skip_reasons(reasons),
         "size_multiplier": size_multiplier,
         "edge": edge,
+        "probability_penalty_factor": peak_window_penalty.get("penalty_factor", 1.0),
+        "probability_penalty_reason": peak_window_penalty.get("reason"),
+        "probability_local_time": peak_window_penalty.get("local_time"),
     }
 
 
@@ -1177,12 +1260,14 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
     }
 
 
-def build_candidate_assessments(bucket_probabilities, quote_snapshot, hours):
+def build_candidate_assessments(
+    bucket_probabilities, quote_snapshot, hours, market_context=None
+):
     assessments = []
     quote_by_market = {entry.get("market_id"): entry for entry in quote_snapshot or []}
     for bucket in bucket_probabilities or []:
         quote = quote_by_market.get(bucket.get("market_id"), {})
-        yes_candidate = evaluate_yes_candidate(bucket, quote, hours)
+        yes_candidate = evaluate_yes_candidate(bucket, quote, hours, market_context)
         no_candidate = evaluate_no_candidate(bucket, quote, hours)
         assessments.extend([yes_candidate, no_candidate])
     return assessments
@@ -2293,6 +2378,24 @@ def sync_active_order_with_paper_engine(
     cancel_requested=False,
     cancel_reason=None,
 ):
+    paper_state = market.get("paper_execution_state") or {}
+    if (
+        active_order
+        and active_order.get("status") == "partial"
+        and paper_state.get("status") in {None, "idle"}
+    ):
+        market["paper_execution_state"] = {
+            **build_empty_paper_execution_state(),
+            "order_id": active_order.get("order_id"),
+            "status": "partial",
+            "submitted_at": active_order.get("created_at") or ts,
+            "submit_ready_at": active_order.get("updated_at") or ts,
+            "queue_ahead_shares": 0.0,
+            "filled_shares": float(active_order.get("filled_shares", 0.0) or 0.0),
+            "remaining_shares": float(active_order.get("remaining_shares", 0.0) or 0.0),
+            "last_event_ts": active_order.get("updated_at") or ts,
+            "last_reason": "order_restored_partial",
+        }
     step = simulate_paper_execution_step(
         market,
         active_order,
@@ -2337,7 +2440,7 @@ def sync_active_order_with_paper_engine(
         }
 
     if state_status == "canceled":
-        terminal_reason = cancel_reason or state.get("cancel_reason") or "canceled"
+        terminal_reason = state.get("cancel_reason") or cancel_reason or "canceled"
         terminal = apply_order_transition(active_order, "canceled", terminal_reason, ts)
         archive_order(market, terminal)
         maybe_release_order_reservation(market, risk_state, terminal_reason, ts)
@@ -2430,6 +2533,33 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
             except Exception:
                 pass
         active_order = market.get("active_order")
+        if active_order and reservation and assessment:
+            paper_state = market.get("paper_execution_state") or {}
+            if paper_state.get("status") == "cancel_pending":
+                cancel_reason = paper_state.get("cancel_reason") or cancel_reason
+            built = build_passive_order_intent(
+                market,
+                reservation,
+                assessment,
+                market.get("quote_snapshot", []),
+                ts,
+            )
+            if built.get("order"):
+                new_limit = float(built["order"].get("limit_price", 0.0) or 0.0)
+                old_limit = float(active_order.get("limit_price", 0.0) or 0.0)
+                if (
+                    active_order.get("status") == "working"
+                    and paper_state.get("status") in {None, "idle", "submitting"}
+                    and abs(
+                    new_limit - old_limit
+                    )
+                    > float(ORDER_POLICY.get("replace_edge_buffer", 0.02) or 0.02)
+                ):
+                    cancel_reason = cancel_reason or "quote_repriced"
+        elif active_order:
+            paper_state = market.get("paper_execution_state") or {}
+            if paper_state.get("status") == "cancel_pending":
+                cancel_reason = paper_state.get("cancel_reason") or cancel_reason
         return sync_active_order_with_paper_engine(
             market,
             risk_state,
@@ -2441,6 +2571,10 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
             cancel_reason=cancel_reason,
         )
 
+    if cancel_reason:
+        maybe_release_order_reservation(market, risk_state, cancel_reason, ts)
+        return {"filled_cost": 0.0, "opened_position": False}
+
     built = build_passive_order_intent(
         market,
         reservation,
@@ -2449,24 +2583,9 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
         ts,
     )
 
-    replacement_order = None
-    active_order = market.get("active_order")
-    if active_order and built.get("order"):
-        new_limit = float(built["order"].get("limit_price", 0.0) or 0.0)
-        old_limit = float(active_order.get("limit_price", 0.0) or 0.0)
-        if active_order.get("status") == "working" and abs(
-            new_limit - old_limit
-        ) > float(ORDER_POLICY.get("replace_edge_buffer", 0.02) or 0.02):
-            transition_order_terminal(
-                market, risk_state, active_order, "canceled", "quote_repriced", ts
-            )
-            replacement_order = built["order"]
-            active_order = None
-
-    if market.get("active_order") is None and built.get("order"):
-        replacement_order = replacement_order or built["order"]
+    if built.get("order"):
         market["active_order"] = apply_order_transition(
-            replacement_order,
+            built["order"],
             "working",
             "order_submitted",
             ts,
@@ -2482,6 +2601,8 @@ def sync_market_order(market, risk_state, forecast_snap, market_ready=True):
         assessment,
         forecast_snap,
         ts,
+        cancel_requested=bool(cancel_reason),
+        cancel_reason=cancel_reason,
     )
 
 
@@ -2932,6 +3053,12 @@ def scan_and_update():
                 mkt["bucket_probabilities"],
                 mkt["quote_snapshot"],
                 hours,
+                {
+                    "city_slug": city_slug,
+                    "market_date": date,
+                    "metar": snap.get("metar"),
+                    "now_ts": snap.get("ts"),
+                },
             )
             reconcile_market_reservation(
                 mkt, risk_state, RISK_ROUTER, reserved_at=snap.get("ts")
