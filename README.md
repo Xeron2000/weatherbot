@@ -1,255 +1,111 @@
 # 🌤 WeatherBet — Polymarket Weather Trading Bot
 
-Automated weather market trading bot for Polymarket. Finds mispriced temperature outcomes using real forecast data from multiple sources across 20 cities worldwide.
+当前主入口仍然是 `bot_v2.py`，但主体实现已经拆到 `weatherbot/` 包里。
 
-No SDK. No black box. Pure Python.
+目标不变：扫描 Polymarket 天气温度市场，基于多源天气数据做模拟交易、被动挂单、订单生命周期管理和回放分析。
 
----
+## 运行方式
 
-## Versions
+兼容入口保持不变：
 
-### `bot_v1.py` — Base Bot
-The foundation. Scans 6 US cities, fetches forecasts from NWS using airport station coordinates, finds matching temperature buckets on Polymarket, and enters trades when the market price is below the entry threshold.
+```bash
+python bot_v2.py
+python bot_v2.py status
+python bot_v2.py report
+python bot_v2.py replay
+```
 
-No math, no complexity. Just the core logic — good for understanding how the system works.
+`config.json` 与 `data/` 现有格式保持兼容，不需要迁移历史文件。
 
-### `bot_v2.py` — Full Bot (current)
-Everything in v1, plus:
-- **20 cities** across 4 continents (US, Europe, Asia, South America, Oceania)
-- **3 forecast sources** — ECMWF (global), HRRR/GFS (US, hourly), METAR (real-time observations)
-- **Expected Value** — skips trades where the math doesn't work
-- **Kelly Criterion** — sizes positions based on edge strength
-- **Stop-loss + trailing stop** — 20% stop, moves to breakeven at +20%
-- **Slippage filter** — skips markets with spread > $0.03
-- **Self-calibration** — learns forecast accuracy per city over time
-- **Full data storage** — every forecast snapshot, trade, and resolution saved to JSON
+## 当前模块结构
 
----
+```text
+bot_v2.py                 # 兼容 shim
+weatherbot/__init__.py    # 兼容导出层 + 运行时同步
+weatherbot/config.py      # config.json 加载与策略/执行配置解析
+weatherbot/paths.py       # 仓库根目录、config/data 默认路径
+weatherbot/domain.py      # 城市、时区、月份常量
+weatherbot/forecasts.py   # 天气与结算温度数据访问
+weatherbot/polymarket.py  # Polymarket/Gamma/CLOB 解析与行情辅助
+weatherbot/persistence.py # state / market / calibration JSON 读写
+weatherbot/strategy.py    # 扫描、候选、风控、主循环、监控
+weatherbot/paper_execution.py # 被动订单与 paper execution 生命周期
+weatherbot/reporting.py   # status / report / replay 输出
+weatherbot/cli.py         # CLI 命令分发
+```
 
-## How It Works
+## 安装
 
-Polymarket runs markets like "Will the highest temperature in Chicago be between 46–47°F on March 7?" These markets are often mispriced — the forecast says 78% likely but the market is trading at 8 cents.
-
-The bot:
-1. Fetches forecasts from ECMWF and HRRR via Open-Meteo (free, no key required)
-2. Gets real-time observations from METAR airport stations
-3. Builds a semantic market snapshot with resolution metadata, contract identifiers, and scan guardrails
-4. Skips markets with explicit `skip_reasons` when station mapping, units, or weather freshness do not match
-5. Finds the matching temperature bucket on Polymarket
-6. Calculates Expected Value — only enters if the math is positive
-7. Sizes the position using fractional Kelly Criterion
-8. Monitors stops every 10 minutes, full scan every hour
-9. Auto-resolves markets by querying Polymarket API directly
-
----
-
-## Why Airport Coordinates Matter
-
-Most bots use city center coordinates. That's wrong.
-
-Every Polymarket weather market resolves on a specific airport station. NYC resolves on LaGuardia (KLGA), Dallas on Love Field (KDAL) — not DFW. The difference between city center and airport can be 3–8°F. On markets with 1–2°F buckets, that's the difference between the right trade and a guaranteed loss.
-
-| City | Station | Airport |
-|------|---------|---------|
-| NYC | KLGA | LaGuardia |
-| Chicago | KORD | O'Hare |
-| Miami | KMIA | Miami Intl |
-| Dallas | KDAL | Love Field |
-| Seattle | KSEA | Sea-Tac |
-| Atlanta | KATL | Hartsfield |
-| London | EGLC | London City |
-| Tokyo | RJTT | Haneda |
-| ... | ... | ... |
-
----
-
-## Installation
 ```bash
 git clone https://github.com/alteregoeth-ai/weatherbot
 cd weatherbot
-pip install requests
+uv sync
 ```
 
-Create `config.json` in the project folder:
-```json
-{
-  "balance": 10000.0,
-  "min_volume": 2000,
-  "min_hours": 2.0,
-  "max_hours": 72.0,
-  "kelly_fraction": 0.25,
-  "max_slippage": 0.03,
-  "scan_interval": 3600,
-  "calibration_min": 30,
-  "vc_key": "YOUR_VISUAL_CROSSING_KEY",
-  "yes_strategy": {
-    "max_price": 0.25,
-    "min_probability": 0.14,
-    "min_edge": 0.03,
-    "min_hours": 2.0,
-    "max_hours": 72.0,
-    "max_size": 20.0,
-    "min_size": 1.0
-  },
-  "no_strategy": {
-    "min_price": 0.65,
-    "min_probability": 0.70,
-    "min_edge": 0.04,
-    "min_hours": 2.0,
-    "max_hours": 72.0,
-    "max_size": 20.0,
-    "min_size": 1.0
-  },
-  "paper_execution": {
-    "submission_latency_ms": 5000,
-    "queue_ahead_shares": 80.0,
-    "queue_ahead_ratio": 0.25,
-    "touch_not_fill_min_touches": 1,
-    "partial_fill_slice_ratio": 0.5,
-    "cancel_latency_ms": 4000,
-    "adverse_fill_buffer_ticks": 1
-  }
-}
-```
+如果你只想跑测试，确保环境里至少有 `requests` 和 `pytest`，然后直接使用 `uv run ...`。
 
-Get a free Visual Crossing API key at visualcrossing.com — used to fetch actual temperatures after market resolution.
+## 配置
 
----
+项目默认从仓库根目录读取 `config.json`，核心字段包括：
 
-## Usage
-```bash
-python bot_v2.py           # start the bot — scans every hour
-python bot_v2.py status    # balance and open positions
-python bot_v2.py report    # full breakdown of all resolved markets
-```
+- 顶层资金与扫描参数：`balance`、`min_volume`、`min_hours`、`max_hours`、`scan_interval`
+- 策略块：`yes_strategy`、`no_strategy`
+- 风控块：`risk_router`
+- 订单策略：`order_policy`
+- Paper execution：`paper_execution`
+- 结算温度拉取：`vc_key`
 
----
+`vc_key` 继续来自 `config.json`，与现有代码和数据格式兼容。
 
-## Data Storage
+## 数据持久化
 
-All data is saved to `data/markets/` — one JSON file per market. Each file contains:
-- Hourly forecast snapshots (ECMWF, HRRR, METAR)
-- Market price history
-- Resolution metadata (`station`, `unit`, `resolution_text`, `resolution_source`, `rounding_rule`)
-- Condition / token identifiers for each contract in `market_contracts`
-- Scan guardrails and explicit `skip_reasons` for rejected markets
-- Phase 2 probability truth in `bucket_probabilities`
-- Phase 2 execution truth in `quote_snapshot`
-- Phase 2 candidate explanations in `candidate_assessments`
-- Phase 3 portfolio ledger in `risk_state` inside `data/state.json`
-- Phase 3 route audit trail in `route_decisions`
-- Phase 3 active/released reservation facts in `reserved_exposure`
-- Position details (entry, stop, PnL)
-- Final resolution outcome
+运行时仍然写入：
 
-This data is used for self-calibration and auditability — the bot learns forecast accuracy per city over time, while the persisted market snapshot shows why a market was accepted into the scan universe or skipped.
+- `data/state.json`
+- `data/calibration.json`
+- `data/markets/*.json`
 
----
+这些 JSON schema 保持现有测试覆盖下的兼容行为，包括：
 
-## Phase 1 Verification
+- `bucket_probabilities`
+- `quote_snapshot`
+- `candidate_assessments`
+- `route_decisions`
+- `reserved_exposure`
+- `active_order`
+- `order_history`
+- `paper_execution_state`
+- `execution_events`
 
-Run the Phase 1 semantic scan regression suite locally with:
+## 回归验证
+
+完整回归：
 
 ```bash
-uv run pytest tests/test_phase1_market_semantics.py tests/test_phase1_guardrails.py tests/test_phase1_scan_loop.py tests/test_phase1_reporting.py -q
+uv run pytest -q
 ```
 
-This verifies the persisted snapshot schema, resolution metadata, contract identifiers, scan guardrails, and operator-facing accepted/skipped reporting output.
-
----
-
-## Phase 2 Verification
-
-Run the Phase 2 candidate pipeline regression suite locally with:
+兼容入口 spot check：
 
 ```bash
-uv run pytest tests/test_phase2_probability.py tests/test_phase2_quotes.py tests/test_phase2_strategies.py tests/test_phase2_reporting.py -q
+uv run python bot_v2.py status
 ```
 
-Phase 2 adds three persisted fact sources to each admissible market JSON:
+## 说明
 
-- `bucket_probabilities` — all-bucket per-source and aggregate fair probability table
-- `quote_snapshot` — YES/NO token-level CLOB quote truth plus execution stop reasons
-- `candidate_assessments` — operator-facing YES/NO candidate outputs with `strategy_leg`, `status`, `reasons`, `fair_price`, and quote context
+- 已删除旧的 `bot_v1.py` 与历史 dashboard 文件，避免双实现继续漂移。
+- `bot_v2.py` 现在只负责兼容导入与 CLI 启动，不再承载主体实现。
+- `import bot_v2` 的现有测试/脚本调用方式继续可用。
 
-`python bot_v2.py status` and `python bot_v2.py report` now show candidate explanation summaries directly from `candidate_assessments`, so you can inspect accepted, rejected, size-down, and reprice outcomes before any trades resolve.
-
----
-
-## Phase 3 Verification
-
-Run the combined Phase 2 + Phase 3 regression suite locally with:
-
-```bash
-uv run pytest tests/test_phase2_probability.py tests/test_phase2_quotes.py tests/test_phase2_strategies.py tests/test_phase2_reporting.py tests/test_phase3_router.py tests/test_phase3_scan_loop.py tests/test_phase3_reporting.py -q
-```
-
-Phase 3 adds three persisted risk facts:
-
-- `risk_state` — bankroll-level risk ledger in `data/state.json`, including YES/NO budgets, reserved worst-loss, and city/date/event exposure rollups
-- `route_decisions` — per-market routing audit trail showing accepted/rejected decisions, budget buckets, reserved worst-loss, and reason codes
-- `reserved_exposure` — the currently reserved exposure for a market, plus `release_reason` when a reservation is downgraded, missing, or invalidated
-
-`python bot_v2.py status` and `python bot_v2.py report` now surface YES/NO budget usage, global worst-loss usage, exposure rollups, and common reject/release reasons directly from those persisted facts.
-
----
-
-## Phase 4 Verification
-
-Run the full Phase 4 passive order lifecycle regression suite locally with:
-
-```bash
-uv run pytest tests/test_phase4_orders.py tests/test_phase4_scan_loop.py tests/test_phase4_restore.py tests/test_phase4_reporting.py -q
-```
-
-Phase 4 adds three persisted order fact sources:
-
-- `active_order` — the current unfinished passive order for a market, including `limit_price`, `time_in_force`, `expires_at`, `filled_shares`, `remaining_shares`, and `status_reason`
-- `order_history` — append-only terminal order archive containing `filled`, `canceled`, and `expired` outcomes plus their `status_reason` trail
-- `order_state` — restored ledger in `data/state.json` / `load_state()` that summarizes `status_counts`, `active_orders`, and `last_restored_at` for CLI reporting
-
-`python bot_v2.py status` and `python bot_v2.py report` now read those persisted order facts directly so the operator can inspect planned / working / partial / filled / canceled / expired lifecycle state without opening the raw market JSON files.
-
----
-
-## Phase 5 Verification
-
-Run the Phase 5 paper execution + replay regression suite locally with:
-
-```bash
-uv run pytest tests/test_phase5_paper_execution.py tests/test_phase5_scan_loop.py tests/test_phase5_replay.py -q
-```
-
-Phase 5 replay reads three persisted truth sources directly from local market JSON / state files:
-
-- `execution_events` — append-only submit / touch / queue / partial_fill / filled / cancel timeline for each paper order
-- `paper_execution_state` — latest submission, queue, fill, and cancel latency state for the active replayable order
-- `order_history` — terminal filled / canceled / expired order facts used to select recent orders without rerunning the engine
-
-Use the replay CLI to inspect a recent order or a strict market / order match without rerunning scan logic:
-
-```bash
-python bot_v2.py replay
-python bot_v2.py replay --limit 3
-python bot_v2.py replay --market <market_id>
-python bot_v2.py replay --order <order_id>
-```
-
-The replay output includes operator-facing fill quality evidence — `touch_not_fill`, `queue_wait_ms`, `partial_fill_slices`, `cancel_delay_ms`, filled vs unfilled shares, and `adverse_buffer_hits` — plus tuning hints that map directly back to the conservative paper parameters (`queue_ahead_shares`, `touch_not_fill_min_touches`, `partial_fill_slice_ratio`, `cancel_latency_ms`, `adverse_fill_buffer_ticks`).
-
----
-
-## APIs Used
+## 外部数据源
 
 | API | Auth | Purpose |
 |-----|------|---------|
 | Open-Meteo | None | ECMWF + HRRR forecasts |
 | Aviation Weather (METAR) | None | Real-time station observations |
-| Polymarket Gamma | None | Market data |
+| Polymarket Gamma / CLOB | None | Market data |
 | Visual Crossing | Free key | Historical temps for resolution |
-
----
 
 ## Disclaimer
 
-This is not financial advice. Prediction markets carry real risk. Run the simulation thoroughly before committing real capital.
+这不是投资建议。先在模拟模式下完整验证，再考虑任何真实资金行为。
