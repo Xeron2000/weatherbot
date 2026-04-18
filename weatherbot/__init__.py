@@ -47,6 +47,7 @@ NO_STRATEGY = _cfg.get(
     "no_strategy",
     {
         "min_price": 0.65,
+        "max_ask": 0.95,
         "min_probability": 0.70,
         "min_edge": 0.04,
         "min_hours": MIN_HOURS,

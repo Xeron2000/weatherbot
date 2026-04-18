@@ -34,6 +34,7 @@ NO_STRATEGY = _cfg.get(
     "no_strategy",
     {
         "min_price": 0.65,
+        "max_ask": 0.95,
         "min_probability": 0.70,
         "min_edge": 0.04,
         "min_hours": MIN_HOURS,
@@ -295,6 +296,7 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
     quote = quote_for_side(quote_snapshot, "no")
     fair_price = bucket_probability.get("fair_no")
     ask = quote.get("ask")
+    max_ask = NO_STRATEGY.get("max_ask")
     reasons.extend(
         missing_strategy_fields(
             NO_STRATEGY,
@@ -318,6 +320,8 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
         reasons.append("missing_quote_price")
     if ask is not None and ask < NO_STRATEGY.get("min_price", 0.0):
         reasons.append("price_below_min")
+    if ask is not None and max_ask is not None and ask > max_ask:
+        reasons.append("ask_above_max")
     if bucket_probability.get("fair_no", 0.0) < NO_STRATEGY.get("min_probability", 0.0):
         reasons.append("probability_below_min")
 
@@ -329,10 +333,10 @@ def evaluate_no_candidate(bucket_probability, quote_snapshot, hours):
         size_multiplier, status = determine_size_multiplier(
             edge, NO_STRATEGY.get("min_edge", 0.0)
         )
-    if "price_below_min" in reasons:
+    if "price_below_min" in reasons or "ask_above_max" in reasons:
         status = "reprice"
         size_multiplier = 0.0
-    if any(reason != "price_below_min" for reason in reasons):
+    if any(reason not in {"price_below_min", "ask_above_max"} for reason in reasons):
         status = "rejected"
         size_multiplier = 0.0
 
