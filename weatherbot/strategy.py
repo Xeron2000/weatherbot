@@ -16,6 +16,7 @@ _cfg = load_config()
 MIN_HOURS = _cfg.get("min_hours", 2.0)
 MAX_HOURS = _cfg.get("max_hours", 72.0)
 KELLY_FRACTION = _cfg.get("kelly_fraction", 0.25)
+NO_KELLY_FRACTION = _cfg.get("no_kelly_fraction", 1.0)
 MAX_BET = _cfg.get("max_bet", 20.0)
 YES_STRATEGY = _cfg.get(
     "yes_strategy",
@@ -383,19 +384,27 @@ def strategy_for_leg(strategy_leg):
         return NO_STRATEGY
     return {}
 
+def sizing_fraction_for_leg(strategy_leg):
+    if strategy_leg == "NO_CARRY":
+        return float(NO_KELLY_FRACTION or 1.0)
+    return 1.0
+
 def candidate_worst_loss(assessment, bankroll):
-    strategy = strategy_for_leg(assessment.get("strategy_leg"))
+    strategy_leg = assessment.get("strategy_leg")
+    strategy = strategy_for_leg(strategy_leg)
     max_size = float(strategy.get("max_size", 0.0) or 0.0)
     min_size = float(strategy.get("min_size", 0.0) or 0.0)
     size_multiplier = float(assessment.get("size_multiplier", 0.0) or 0.0)
+    sizing_fraction = sizing_fraction_for_leg(strategy_leg)
+    effective_max_size = max_size * sizing_fraction
 
-    if max_size <= 0 or size_multiplier <= 0:
+    if effective_max_size <= 0 or size_multiplier <= 0:
         return 0.0
 
-    worst_loss = max_size * size_multiplier
+    worst_loss = effective_max_size * size_multiplier
     if worst_loss < min_size:
         worst_loss = min_size
-    return round(min(max_size, worst_loss), 2)
+    return round(min(effective_max_size, worst_loss), 2)
 
 def assessment_liquidity(assessment):
     quote = assessment.get("quote_context", {}) or {}
