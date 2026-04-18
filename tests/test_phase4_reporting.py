@@ -236,3 +236,40 @@ def test_order_summary_stays_separate_from_trade_and_candidate_sections(
     assert route_idx < order_idx
     assert "No trades yet" in out
     assert "accepted=1" not in out[order_idx:]
+
+
+def test_print_replay_filters_out_no_runtime_orders(
+    phase1_gamma_event, monkeypatch, capsys
+):
+    ts = "2026-04-17T12:00:00+00:00"
+    market = make_market(phase1_gamma_event, ts)
+    market["active_order"] = {
+        "order_id": "no-active-order",
+        "strategy_leg": "NO_CARRY",
+        "token_side": "no",
+        "market_id": "mkt-65-69",
+        "range": [65.0, 69.0],
+        "status": "working",
+        "updated_at": ts,
+    }
+    market["order_history"].append(
+        {
+            "order_id": "no-history-order",
+            "strategy_leg": "NO_CARRY",
+            "token_side": "no",
+            "market_id": "mkt-65-69",
+            "range": [65.0, 69.0],
+            "status": "canceled",
+            "status_reason": "yes_only_runtime",
+            "updated_at": ts,
+        }
+    )
+    monkeypatch.setattr(weatherbot, "load_all_markets", lambda: [market])
+
+    weatherbot.print_replay(limit=5)
+    out = capsys.readouterr().out
+
+    assert "Replay orders" in out
+    assert "no-active-order" not in out
+    assert "no-history-order" not in out
+    assert "No replay orders matched." in out
