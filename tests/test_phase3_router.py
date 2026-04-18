@@ -64,6 +64,12 @@ def load_router_cfg():
     return bot_v2.load_risk_router_config(config_dict)
 
 
+def load_order_policy_cfg():
+    with open("config.json", encoding="utf-8") as handle:
+        config_dict = json.load(handle)
+    return bot_v2.load_order_policy_config(config_dict)
+
+
 def test_config_json_contains_conservative_risk_router_defaults():
     with open("config.json", encoding="utf-8") as handle:
         config_dict = json.load(handle)
@@ -99,6 +105,18 @@ def test_strategy_profiles_commit_yes_only_shared_fields():
         assert "no_budget_pct" not in profile["risk_router"]
         assert "no_leg_cap_pct" not in profile["risk_router"]
         assert "no_time_in_force" not in profile["order_policy"]
+
+
+def test_runtime_router_and_order_policy_exports_are_yes_shared_only():
+    router = load_router_cfg()
+    order_policy = load_order_policy_cfg()
+
+    assert router["yes_budget_pct"] == 0.30
+    assert router["yes_leg_cap_pct"] == 0.30
+    assert "no_budget_pct" not in router
+    assert "no_leg_cap_pct" not in router
+    assert order_policy["yes_time_in_force"] == "GTC"
+    assert "no_time_in_force" not in order_policy
 
 
 def test_config_json_commits_all_strategy_profiles_with_expected_risk_ordering():

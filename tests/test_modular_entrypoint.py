@@ -230,15 +230,23 @@ def test_runtime_entrypoints_consume_merged_profile_config(monkeypatch, tmp_path
     weatherbot_module, bot_v2_module = reload_runtime_modules(monkeypatch, config_path)
 
     assert weatherbot_module.BALANCE == 100.0
+    assert weatherbot_module.VC_KEY == "json-key"
     assert weatherbot_module.YES_STRATEGY["max_price"] == 0.08
     assert weatherbot_module.YES_STRATEGY["min_edge"] == 0.05
-    assert weatherbot_module.NO_STRATEGY["min_probability"] == 0.84
     assert weatherbot_module.RISK_ROUTER["global_usage_cap_pct"] == 0.92
+    assert weatherbot_module.RISK_ROUTER["yes_budget_pct"] == 0.25
+    assert "no_budget_pct" not in weatherbot_module.RISK_ROUTER
+    assert "no_leg_cap_pct" not in weatherbot_module.RISK_ROUTER
+    assert weatherbot_module.ORDER_POLICY["yes_time_in_force"] == "GTC"
+    assert "no_time_in_force" not in weatherbot_module.ORDER_POLICY
     assert weatherbot_module.PAPER_EXECUTION["submission_latency_ms"] == 5000
+    assert not hasattr(weatherbot_module, "NO_STRATEGY")
     assert bot_v2_module.BALANCE == weatherbot_module.BALANCE
+    assert bot_v2_module.VC_KEY == weatherbot_module.VC_KEY
     assert bot_v2_module.YES_STRATEGY == weatherbot_module.YES_STRATEGY
-    assert bot_v2_module.NO_STRATEGY == weatherbot_module.NO_STRATEGY
     assert bot_v2_module.RISK_ROUTER == weatherbot_module.RISK_ROUTER
+    assert bot_v2_module.ORDER_POLICY == weatherbot_module.ORDER_POLICY
+    assert not hasattr(bot_v2_module, "NO_STRATEGY")
 
 
 def test_load_config_without_profile_fields_keeps_legacy_behavior(monkeypatch, tmp_path):
