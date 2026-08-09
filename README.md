@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **ARCHIVED 2026-08-09** — Superseded by [ArchdevilForge/pm-bot](https://github.com/ArchdevilForge/pm-bot)
+> (EMOS 校准多模型集成 + Ladder/Tail/Gopfan2 三策略)。独有被动挂单限价逻辑已并入
+> pm-bot 的 `bots/weather/core/passive_price.py`,详见 pm-bot `docs/migration-weatherbot.md`。
+
 # 🌤 WeatherBet — Polymarket Weather Trading Bot
 
 当前主入口仍然是 `bot_v2.py`，但主体实现已经拆到 `weatherbot/` 包里。
